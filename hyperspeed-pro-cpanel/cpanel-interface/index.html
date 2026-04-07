@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HyperSpeed Pro - Performance Optimization</title>
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/dashboard.js"></script>
+</head>
+<body class="hyperspeed-cpanel">
+    <div class="container">
+        <header class="dashboard-header">
+            <div class="header-content">
+                <svg class="logo-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+                    <defs>
+                        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                    <circle cx="24" cy="24" r="22" fill="url(#grad1)"/>
+                    <path d="M18 24 L24 18 L30 24 M24 18 L24 30" stroke="white" stroke-width="3" fill="none" stroke-linecap="round"/>
+                </svg>
+                <div>
+                    <h1>HyperSpeed Pro</h1>
+                    <p class="subtitle">Performance Optimization for Your Websites</p>
+                </div>
+            </div>
+            <div class="header-status">
+                <span class="status-badge status-active" id="globalStatus">
+                    <span class="status-dot"></span>
+                    Active
+                </span>
+            </div>
+        </header>
+
+        <nav class="tab-nav">
+            <button class="tab-button active" onclick="switchTab('dashboard')">Dashboard</button>
+            <button class="tab-button" onclick="switchTab('domains')">Domains</button>
+            <button class="tab-button" onclick="switchTab('cache')">Cache Control</button>
+            <button class="tab-button" onclick="switchTab('security')">Security</button>
+            <button class="tab-button" onclick="switchTab('settings')">Settings</button>
+            <button class="tab-button" onclick="switchTab('analytics')">Analytics</button>
+        </nav>
+
+        <!-- Dashboard Tab -->
+        <div id="tab-dashboard" class="tab-content active">
+            <div class="performance-summary">
+                <div class="summary-card">
+                    <div class="summary-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        ⚡
+                    </div>
+                    <div class="summary-content">
+                        <h3>Performance Boost</h3>
+                        <div class="summary-value" id="perfBoost">Loading...</div>
+                        <div class="summary-label">Faster than baseline</div>
+                    </div>
+                </div>
+
+                <div class="summary-card">
+                    <div class="summary-icon" style="background: linear-gradient(135deg, #00a8ff 0%, #0097e6 100%);">
+                        💾
+                    </div>
+                    <div class="summary-content">
+                        <h3>Cache Hit Rate</h3>
+                        <div class="summary-value" id="cacheHitRate">Loading...</div>
+                        <div class="summary-label" id="cacheStats">Calculating...</div>
+                    </div>
+                </div>
+
+                <div class="summary-card">
+                    <div class="summary-icon" style="background: linear-gradient(135deg, #44bd32 0%, #78e08f 100%);">
+                        📊
+                    </div>
+                    <div class="summary-content">
+                        <h3>Bandwidth Saved</h3>
+                        <div class="summary-value" id="bandwidthSaved">Loading...</div>
+                        <div class="summary-label">This month</div>
+                    </div>
+                </div>
+
+                <div class="summary-card">
+                    <div class="summary-icon" style="background: linear-gradient(135deg, #ffd32a 0%, #ffb142 100%);">
+                        🌐
+                    </div>
+                    <div class="summary-content">
+                        <h3>Active Domains</h3>
+                        <div class="summary-value" id="activeDomains">Loading...</div>
+                        <div class="summary-label">Being optimized</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-panel">
+                    <h2>Quick Actions</h2>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="clearAllCache()">
+                            <span class="btn-icon">🗑️</span>
+                            Clear All Cache
+                        </button>
+                        <button class="btn btn-secondary" onclick="refreshDashboard()">
+                            <span class="btn-icon">🔄</span>
+                            Refresh Stats
+                        </button>
+                        <button class="btn btn-secondary" onclick="runOptimization()">
+                            <span class="btn-icon">⚙️</span>
+                            Optimize Now
+                        </button>
+                        <button class="btn btn-secondary" onclick="downloadReport()">
+                            <span class="btn-icon">📄</span>
+                            Download Report
+                        </button>
+                    </div>
+                </div>
+
+                <div class="info-panel">
+                    <h2>Active Features</h2>
+                    <ul class="feature-list">
+                        <li class="feature-enabled">
+                            <span class="check">✓</span>
+                            Multi-Tier Page Caching
+                        </li>
+                        <li class="feature-enabled">
+                            <span class="check">✓</span>
+                            Database Query Caching
+                        </li>
+                        <li class="feature-enabled">
+                            <span class="check">✓</span>
+                            Brotli Compression
+                        </li>
+                        <li class="feature-enabled">
+                            <span class="check">✓</span>
+                            DDoS Protection
+                        </li>
+                        <li class="feature-enabled">
+                            <span class="check">✓</span>
+                            Bot Detection
+                        </li>
+                        <li class="feature-enabled">
+                            <span class="check">✓</span>
+                            Asset Optimization
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="chart-container">
+                <h2>Performance Trends (Last 24 Hours)</h2>
+                <canvas id="performanceChart" width="800" height="300"></canvas>
+            </div>
+        </div>
+
+        <!-- Domains Tab -->
+        <div id="tab-domains" class="tab-content">
+            <div class="domains-header">
+                <h2>Your Domains</h2>
+                <button class="btn btn-primary" onclick="refreshDomains()">
+                    <span class="btn-icon">🔄</span>
+                    Refresh
+                </button>
+            </div>
+
+            <div id="domainsList" class="domains-grid">
+                <!-- Populated by JavaScript -->
+            </div>
+        </div>
+
+        <!-- Cache Control Tab -->
+        <div id="tab-cache" class="tab-content">
+            <div class="cache-control-panel">
+                <h2>Cache Management</h2>
+                
+                <div class="control-section">
+                    <h3>Flush Cache</h3>
+                    <div class="form-group">
+                        <label for="flushDomain">Select Domain:</label>
+                        <select id="flushDomain" class="form-control">
+                            <option value="">All Domains</option>
+                            <!-- Populated by JavaScript -->
+                        </select>
+                    </div>
+                    <button class="btn btn-danger" onclick="flushSelectedCache()">
+                        Flush Cache
+                    </button>
+                </div>
+
+                <div class="control-section">
+                    <h3>Cache Bypass Rules</h3>
+                    <p class="help-text">Add custom rules to bypass caching for specific URLs, cookies, or patterns.</p>
+                    
+                    <div class="form-group">
+                        <label for="bypassDomain">Domain:</label>
+                        <select id="bypassDomain" class="form-control">
+                            <!-- Populated by JavaScript -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bypassType">Type:</label>
+                        <select id="bypassType" class="form-control">
+                            <option value="uri">URL Pattern</option>
+                            <option value="cookie">Cookie Name</option>
+                            <option value="ip">IP Address</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bypassPattern">Pattern:</label>
+                        <input type="text" id="bypassPattern" class="form-control" 
+                               placeholder="/checkout, /cart, wordpress_logged_in, etc.">
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="addBypassRule()">
+                        Add Bypass Rule
+                    </button>
+                </div>
+
+                <div class="control-section">
+                    <h3>Existing Bypass Rules</h3>
+                    <div id="bypassRulesList">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Tab -->
+        <div id="tab-security" class="tab-content">
+            <div class="security-panel">
+                <h2>Security Settings</h2>
+                
+                <div class="security-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="blockedRequests">0</div>
+                        <div class="stat-label">Blocked Requests</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="rateLimitHits">0</div>
+                        <div class="stat-label">Rate Limited</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="botDetections">0</div>
+                        <div class="stat-label">Bots Detected</div>
+                    </div>
+                </div>
+
+                <div class="control-section">
+                    <h3>Security Exemptions</h3>
+                    <p class="help-text">Whitelist trusted IPs or user agents to bypass security checks.</p>
+                    
+                    <div class="form-group">
+                        <label for="exemptionType">Type:</label>
+                        <select id="exemptionType" class="form-control">
+                            <option value="ip">IP Address</option>
+                            <option value="user_agent">User Agent</option>
+                            <option value="country">Country Code</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="exemptionValue">Value:</label>
+                        <input type="text" id="exemptionValue" class="form-control" 
+                               placeholder="192.168.1.1, GoogleBot, US">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="exemptionReason">Reason (optional):</label>
+                        <input type="text" id="exemptionReason" class="form-control" 
+                               placeholder="Office IP, Development server, etc.">
+                    </div>
+                    
+                    <button class="btn btn-primary" onclick="addSecurityExemption()">
+                        Add Exemption
+                    </button>
+                </div>
+
+                <div class ="control-section">
+                    <h3>Active Exemptions</h3>
+                    <div id="exemptionsList">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Settings Tab -->
+        <div id="tab-settings" class="tab-content">
+            <div class="settings-panel">
+                <h2>Settings</h2>
+                
+                <div class="settings-section">
+                    <h3>Cache Settings</h3>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enablePageCache" checked>
+                        <span>Enable Page Caching</span>
+                    </label>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enableObjectCache" checked>
+                        <span>Enable Object Caching (Database Queries)</span>
+                    </label>
+                    
+                    <div class="form-group">
+                        <label for="cacheTTL">Cache TTL (seconds):</label>
+                        <input type="number" id="cacheTTL" class="form-control" value="3600" min="60" max="86400">
+                        <small class="help-text">How long to keep cached content (60-86400 seconds)</small>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Compression Settings</h3>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enableBrotli" checked>
+                        <span>Enable Brotli Compression (Recommended)</span>
+                    </label>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enableZstd" checked>
+                        <span>Enable Zstandard Compression</span>
+                    </label>
+                    
+                    <div class="form-group">
+                        <label for="compressionLevel">Compression Level (1-9):</label>
+                        <input type="range" id="compressionLevel" min="1" max="9" value="6" class="form-range">
+                        <span id="compressionLevelValue">6</span>
+                        <small class="help-text">Higher = better compression but more CPU usage</small>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>Optimization Settings</h3>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enableMinification" checked>
+                        <span>Enable Asset Minification</span>
+                    </label>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enableImageOpt" checked>
+                        <span>Enable Image Optimization</span>
+                    </label>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="enableLazyLoad">
+                        <span>Enable Lazy Loading</span>
+                    </label>
+                </div>
+
+                <div class="settings-actions">
+                    <button class="btn btn-primary" onclick="saveSettings()">
+                        Save Settings
+                    </button>
+                    <button class="btn btn-secondary" onclick="resetSettings()">
+                        Reset to Defaults
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Tab -->
+        <div id="tab-analytics" class="tab-content">
+            <div class="analytics-panel">
+                <h2>Performance Analytics</h2>
+                
+                <div class="analytics-filters">
+                    <select id="analyticsPeriod" class="form-control" onchange="loadAnalytics()">
+                        <option value="24h">Last 24 Hours</option>
+                        <option value="7d">Last 7 Days</option>
+                        <option value="30d">Last 30 Days</option>
+                    </select>
+                    
+                    <select id="analyticsDomain" class="form-control" onchange="loadAnalytics()">
+                        <option value="">All Domains</option>
+                        <!-- Populated by JavaScript -->
+                    </select>
+                </div>
+
+                <div class="analytics-grid">
+                    <div class="analytics-card">
+                        <h3>Cache Performance</h3>
+                        <canvas id="cacheChart" width="400" height="200"></canvas>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h3>Bandwidth Usage</h3>
+                        <canvas id="bandwidthChart" width="400" height="200"></canvas>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h3>Response Times</h3>
+                        <canvas id="responseChart" width="400" height="200"></canvas>
+                    </div>
+                    
+                    <div class="analytics-card">
+                        <h3>Request Distribution</h3>
+                        <canvas id="requestChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+
+                <div class="resource-usage">
+                    <h3>Resource Usage by Domain</h3>
+                    <div id="resourceUsageTable">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <footer class="dashboard-footer">
+            <p>HyperSpeed Pro v1.0.0 | Powered by advanced caching and optimization technology</p>
+            <p><a href="https://docs.hyperspeed.pro" target="_blank">Documentation</a> | 
+               <a href="https://support.hyperspeed.pro" target="_blank">Support</a></p>
+        </footer>
+    </div>
+
+    <div id="toast-container"></div>
+</body>
+</html>

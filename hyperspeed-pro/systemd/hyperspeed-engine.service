@@ -1,0 +1,65 @@
+[Unit]
+Description=HyperSpeed Pro Performance Engine
+Documentation=https://docs.hyperspeed.pro
+After=network.target redis.service memcached.service nginx.service php-fpm.service
+Wants=redis.service memcached.service
+Before=nginx.service
+
+[Service]
+Type=forking
+User=root
+Group=root
+WorkingDirectory=/usr/local/cpanel/lib/hyperspeed_pro
+
+# PID file
+PIDFile=/var/run/hyperspeed-engine.pid
+
+# Start the performance engine
+ExecStartPre=/usr/local/bin/hyperspeed config:validate
+ExecStart=/usr/local/cpanel/3rdparty/bin/php /usr/local/cpanel/lib/hyperspeed_pro/engine-daemon.php start
+ExecReload=/usr/local/bin/hyperspeed cache:reload
+ExecStop=/usr/local/cpanel/3rdparty/bin/php /usr/local/cpanel/lib/hyperspeed_pro/engine-daemon.php stop
+
+# Restart configuration
+Restart=on-failure
+RestartSec=5
+StartLimitInterval=600
+StartLimitBurst=3
+
+# Resource limits
+Nice=0
+IOSchedulingClass=1
+IOSchedulingPriority=4
+
+# Memory limits
+MemoryMax=2G
+MemoryHigh=1536M
+
+# CPU limits
+CPUQuota=100%
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/log/hyperspeed_pro /var/cache/hyperspeed
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hyperspeed-engine
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=60
+
+# Performance
+OOMScoreAdjust=-500
+LimitNOFILE=65536
+LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
+Also=redis.service memcached.service

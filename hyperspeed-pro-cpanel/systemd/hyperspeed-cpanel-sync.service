@@ -1,0 +1,54 @@
+[Unit]
+Description=HyperSpeed Pro - cPanel-WHM Synchronization Service
+Documentation=https://docs.hyperspeed.pro
+After=network.target redis.service hyperspeed-engine.service
+Wants=redis.service
+PartOf=hyperspeed-engine.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/usr/local/cpanel/lib/hyperspeed_pro
+
+# Main sync service process
+ExecStart=/usr/local/cpanel/3rdparty/bin/php /usr/local/cpanel/lib/hyperspeed_pro/sync-users.php
+
+# Restart configuration
+Restart=always
+RestartSec=10
+StartLimitInterval=300
+StartLimitBurst=5
+
+# Resource limits
+Nice=10
+IOSchedulingClass=2
+IOSchedulingPriority=7
+
+# Memory limits (prevent runaway memory consumption)
+MemoryMax=512M
+MemoryHigh=384M
+
+# CPU limits (don't hog the CPU)
+CPUQuota=25%
+
+# Security hardening
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/log/hyperspeed_pro
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hyperspeed-sync
+
+# Process management
+KillMode=process
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
+Also=redis.service

@@ -1,0 +1,54 @@
+# HyperSpeed Pro - Git Ignore File
+
+# Backup files
+*.backup
+*.bak
+*~
+.DS_Store
+
+# Compiled files
+*.pyc
+*.pyo
+__pycache__/
+
+# Log files
+*.log
+logs/
+*.pid
+
+# Development
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+test-output/
+coverage/
+.pytest_cache/
+
+# Distribution / packaging
+dist/
+build/
+*.tar.gz
+*.zip
+*.deb
+*.rpm
+
+# Local configuration (don't commit sensitive data)
+config/hyperspeed.conf
+*.local.conf
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# System files
+.Trash-*/
+Thumbs.db
+
+# Editor backups
+*~
+.#*
+#*#

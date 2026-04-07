@@ -1,0 +1,26 @@
+# HyperSpeed Pro Icon Placeholder
+
+This is a placeholder file for the HyperSpeed Pro icon.
+
+For production use, replace this file with a 48x48 PNG image with:
+- Transparent background
+- HyperSpeed Pro branding (lightning bolt or speed symbol)
+- Optimized for display in WHM interface
+
+Icon Requirements:
+- Format: PNG
+- Size: 48x48 pixels
+- Background: Transparent
+- Colors: Blue/Purple gradient (matching brand)
+- File name: hyperspeed-icon.png
+
+The icon should be visually appealing and represent speed/performance optimization.
+
+Suggested design elements:
+- Lightning bolt ⚡
+- Speedometer 
+- Rocket 🚀
+- Layered cache representation
+- Shield with speed symbol (for security + performance)
+
+Production-ready icon should be created by a graphic designer.

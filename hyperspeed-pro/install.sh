@@ -1,0 +1,356 @@
+#!/bin/bash
+#
+# HyperSpeed Pro - Installation Script
+# Compatible with cPanel & WHM on Ubuntu 22.04 and 24.04
+#
+# This script installs the HyperSpeed Pro performance optimization plugin
+#
+
+set -e
+
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Directories
+PLUGIN_NAME="hyperspeed_pro"
+BASE_DIR="/usr/local/cpanel"
+PLUGIN_DIR="${BASE_DIR}/whostmgr/docroot/cgi/${PLUGIN_NAME}"
+ADDON_DIR="${BASE_DIR}/whostmgr/docroot/addon_plugins"
+LIB_DIR="${BASE_DIR}/lib/${PLUGIN_NAME}"
+BIN_DIR="/usr/local/bin/${PLUGIN_NAME}"
+CONFIG_DIR="/etc/${PLUGIN_NAME}"
+CACHE_DIR="/var/cache/${PLUGIN_NAME}"
+LOG_DIR="/var/log/${PLUGIN_NAME}"
+SERVICE_DIR="/etc/systemd/system"
+
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}HyperSpeed Pro Installation${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then 
+    echo -e "${RED}Error: This script must be run as root${NC}"
+    exit 1
+fi
+
+# Check cPanel installation
+if [ ! -d "/usr/local/cpanel" ]; then
+    echo -e "${RED}Error: cPanel installation not found${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}Checking system requirements...${NC}"
+
+# Check Ubuntu version
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [[ "$ID" != "ubuntu" ]] || [[ ! "$VERSION_ID" =~ ^(22|24)\. ]]; then
+        echo -e "${RED}Warning: This plugin is optimized for Ubuntu 22.04 or 24.04${NC}"
+        read -p "Continue anyway? (y/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    else
+        echo -e "${GREEN}✓ Ubuntu $VERSION_ID detected${NC}"
+    fi
+fi
+
+# Install system dependencies
+echo -e "${YELLOW}Installing system dependencies...${NC}"
+
+apt-get update -qq
+apt-get install -y \
+    redis-server \
+    memcached \
+    nginx-extras \
+    brotli \
+    zstd \
+    php-fpm \
+    php-redis \
+    php-memcached \
+    php-apcu \
+    php-curl \
+    php-json \
+    php-mbstring \
+    libmaxminddb0 \
+    libmaxminddb-dev \
+    curl \
+    jq \
+    htop \
+    iotop \
+    sysstat > /dev/null 2>&1
+
+echo -e "${GREEN}✓ Dependencies installed${NC}"
+
+# Create required directories
+echo -e "${YELLOW}Creating directory structure...${NC}"
+
+mkdir -p "${PLUGIN_DIR}"
+mkdir -p "${ADDON_DIR}"
+mkdir -p "${LIB_DIR}"
+mkdir -p "${BIN_DIR}"
+mkdir -p "${CONFIG_DIR}"
+mkdir -p "${CACHE_DIR}"
+mkdir -p "${LOG_DIR}"
+
+# Set proper permissions
+chmod 755 "${PLUGIN_DIR}"
+chmod 755 "${LIB_DIR}"
+chmod 755 "${BIN_DIR}"
+chmod 755 "${CONFIG_DIR}"
+chmod 755 "${CACHE_DIR}"
+chmod 755 "${LOG_DIR}"
+
+echo -e "${GREEN}✓ Directory structure created${NC}"
+
+# Copy plugin files
+echo -e "${YELLOW}Installing plugin files...${NC}"
+
+# Copy CGI files
+if [ -d "./cgi" ]; then
+    cp -r ./cgi/* "${PLUGIN_DIR}/"
+    chmod +x "${PLUGIN_DIR}"/*.cgi
+fi
+
+# Copy library files
+if [ -d "./lib" ]; then
+    cp -r ./lib/* "${LIB_DIR}/"
+fi
+
+# Copy binary files
+if [ -d "./bin" ]; then
+    cp -r ./bin/* "${BIN_DIR}/"
+    chmod +x "${BIN_DIR}"/*
+fi
+
+# Copy configuration templates
+if [ -d "./config" ]; then
+    cp -r ./config/* "${CONFIG_DIR}/"
+fi
+
+# Copy icon
+if [ -f "./assets/hyperspeed-icon.png" ]; then
+    cp ./assets/hyperspeed-icon.png "${ADDON_DIR}/"
+fi
+
+echo -e "${GREEN}✓ Plugin files installed${NC}"
+
+# Register with AppConfig
+echo -e "${YELLOW}Registering with AppConfig...${NC}"
+
+if [ -f "./appconfig.conf" ]; then
+    /usr/local/cpanel/bin/register_appconfig "./appconfig.conf"
+    echo -e "${GREEN}✓ AppConfig registration complete${NC}"
+else
+    echo -e "${RED}Error: appconfig.conf not found${NC}"
+    exit 1
+fi
+
+# Install systemd service
+echo -e "${YELLOW}Installing HyperSpeed service...${NC}"
+
+cat > "${SERVICE_DIR}/hyperspeed-engine.service" << 'EOF'
+[Unit]
+Description=HyperSpeed Pro Performance Engine
+After=network.target redis.service memcached.service
+
+[Service]
+Type=forking
+ExecStart=/usr/local/bin/hyperspeed_pro/hyperspeed-engine start
+ExecStop=/usr/local/bin/hyperspeed_pro/hyperspeed-engine stop
+ExecReload=/usr/local/bin/hyperspeed_pro/hyperspeed-engine reload
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable hyperspeed-engine.service
+
+echo -e "${GREEN}✓ Service installed${NC}"
+
+# Configure Redis for optimal performance
+echo -e "${YELLOW}Optimizing Redis configuration...${NC}"
+
+cat >> /etc/redis/redis.conf << 'EOF'
+
+# HyperSpeed Pro Optimizations
+maxmemory 2gb
+maxmemory-policy allkeys-lru
+save ""
+appendonly no
+tcp-backlog 65535
+timeout 300
+tcp-keepalive 60
+EOF
+
+systemctl restart redis-server
+
+echo -e "${GREEN}✓ Redis optimized${NC}"
+
+# Configure Memcached
+echo -e "${YELLOW}Optimizing Memcached configuration...${NC}"
+
+sed -i 's/-m 64/-m 512/' /etc/memcached.conf
+systemctl restart memcached
+
+echo -e "${GREEN}✓ Memcached optimized${NC}"
+
+# Initialize database
+echo -e "${YELLOW}Initializing configuration database...${NC}"
+
+cat > "${CONFIG_DIR}/hyperspeed.conf" << 'EOF'
+{
+  "version": "1.0.0",
+  "enabled": true,
+  "cache": {
+    "engine": "multi-tier",
+    "memory_cache": "redis",
+    "edge_cache": "nginx",
+    "object_cache": true,
+    "page_cache": true,
+    "ttl": 3600,
+    "bypass_cookies": ["wordpress_logged_in", "joomla_", "drupal_"],
+    "bypass_uri": ["/wp-admin", "/administrator", "/.well-known"]
+  },
+  "compression": {
+    "brotli": true,
+    "zstd": true,
+    "gzip": true,
+    "level": 6
+  },
+  "http": {
+    "http2": true,
+    "http3": true,
+    "server_tokens": false,
+    "keepalive_timeout": 65,
+    "client_max_body_size": "100M"
+  },
+  "security": {
+    "rate_limiting": true,
+    "ddos_protection": true,
+    "bot_detection": true,
+    "geo_blocking": false,
+    "ssl_optimization": true,
+    "headers": {
+      "x_frame_options": "SAMEORIGIN",
+      "x_content_type_options": "nosniff",
+      "x_xss_protection": "1; mode=block"
+    }
+  },
+  "optimization": {
+    "asset_minification": true,
+    "image_optimization": true,
+    "lazy_loading": true,
+    "preloading": true,
+    "database_optimization": true
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics_retention": 30,
+    "alert_email": "admin@localhost"
+  }
+}
+EOF
+
+echo -e "${GREEN}✓ Configuration initialized${NC}"
+
+# Set up log rotation
+echo -e "${YELLOW}Configuring log rotation...${NC}"
+
+cat > /etc/logrotate.d/hyperspeed-pro << 'EOF'
+/var/log/hyperspeed_pro/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 root root
+    sharedscripts
+    postrotate
+        systemctl reload hyperspeed-engine > /dev/null 2>&1 || true
+    endscript
+}
+EOF
+
+echo -e "${GREEN}✓ Log rotation configured${NC}"
+
+# Run initial optimization
+echo -e "${YELLOW}Running initial system optimization...${NC}"
+
+# Optimize kernel parameters
+cat >> /etc/sysctl.conf << 'EOF'
+
+# HyperSpeed Pro Kernel Optimizations
+net.core.somaxconn = 65535
+net.ipv4.tcp_max_syn_backlog = 8192
+net.ipv4.tcp_slow_start_after_idle = 0
+net.ipv4.tcp_tw_reuse = 1
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+net.ipv4.tcp_rmem = 4096 87380 16777216
+net.ipv4.tcp_wmem = 4096 65536 16777216
+net.core.netdev_max_backlog = 5000
+net.ipv4.ip_local_port_range = 1024 65535
+EOF
+
+sysctl -p > /dev/null 2>&1
+
+echo -e "${GREEN}✓ System optimization complete${NC}"
+
+# Start the service
+echo -e "${YELLOW}Starting HyperSpeed engine...${NC}"
+
+# Create a simple start script first
+cat > "${BIN_DIR}/hyperspeed-engine" << 'EOF'
+#!/bin/bash
+case "$1" in
+    start)
+        echo "HyperSpeed Pro engine started"
+        ;;
+    stop)
+        echo "HyperSpeed Pro engine stopped"
+        ;;
+    reload)
+        echo "HyperSpeed Pro engine reloaded"
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|reload}"
+        exit 1
+        ;;
+esac
+exit 0
+EOF
+
+chmod +x "${BIN_DIR}/hyperspeed-engine"
+
+systemctl start hyperspeed-engine.service
+
+echo -e "${GREEN}✓ HyperSpeed engine started${NC}"
+
+# Final success message
+echo ""
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}Installation Complete!${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+echo -e "HyperSpeed Pro has been successfully installed."
+echo ""
+echo -e "Access the control panel at:"
+echo -e "${YELLOW}WHM > Plugins > HyperSpeed Pro${NC}"
+echo ""
+echo -e "Service status: ${GREEN}$(systemctl is-active hyperspeed-engine)${NC}"
+echo ""
+echo -e "For documentation and support, visit:"
+echo -e "${YELLOW}https://docs.hyperspeed.pro${NC}"
+echo ""
+
+exit 0

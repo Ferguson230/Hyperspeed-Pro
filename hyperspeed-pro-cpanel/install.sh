@@ -1,0 +1,162 @@
+#!/bin/bash
+#
+# HyperSpeed Pro - cPanel User Plugin Installation
+# This installs the user-level interface for individual cPanel accounts
+#
+
+set -e
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}HyperSpeed Pro - cPanel User Plugin${NC}"
+echo -e "${GREEN}Installation${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then 
+    echo -e "${RED}Error: This script must be run as root${NC}"
+    exit 1
+fi
+
+# Check if WHM plugin is installed
+if [ ! -d "/usr/local/cpanel/lib/hyperspeed_pro" ]; then
+    echo -e "${RED}Error: HyperSpeed Pro WHM plugin must be installed first${NC}"
+    echo "Please install the WHM plugin before installing the cPanel user plugin."
+    exit 1
+fi
+
+echo -e "${YELLOW}Installing cPanel user interface...${NC}"
+
+# Directories
+CPANEL_BASE="/usr/local/cpanel"
+PLUGIN_DIR="${CPANEL_BASE}/base/frontend/paper_lantern/hyperspeed"
+API_DIR="${CPANEL_BASE}/Cpanel/API/HyperSpeed"
+UAPI_DIR="${CPANEL_BASE}/Cpanel/API"
+SCRIPTS_DIR="${CPANEL_BASE}/scripts"
+
+# Create directories
+mkdir -p "${PLUGIN_DIR}"
+mkdir -p "${PLUGIN_DIR}/assets"
+mkdir -p "${API_DIR}"
+
+echo -e "${YELLOW}Copying plugin files...${NC}"
+
+# Copy interface files
+if [ -d "./cpanel-interface" ]; then
+    cp -r ./cpanel-interface/* "${PLUGIN_DIR}/"
+fi
+
+# Copy API modules
+if [ -d "./cpanel-api" ]; then
+    cp -r ./cpanel-api/* "${API_DIR}/"
+fi
+
+# Copy UAPI module
+if [ -f "./uapi/HyperSpeed.pm" ]; then
+    cp ./uapi/HyperSpeed.pm "${UAPI_DIR}/"
+fi
+
+# Set permissions
+chmod 755 "${PLUGIN_DIR}"
+chmod 644 "${PLUGIN_DIR}"/*.html
+chmod 644 "${PLUGIN_DIR}"/assets/*
+chmod 755 "${API_DIR}"
+chmod 644 "${API_DIR}"/*.pm
+chmod 644 "${UAPI_DIR}/HyperSpeed.pm"
+
+echo -e "${GREEN}✓ Plugin files installed${NC}"
+
+# Register with cPanel
+echo -e "${YELLOW}Registering with cPanel...${NC}"
+
+# Install dynamicui configuration
+cat > "${CPANEL_BASE}/etc/cpanel/dynamicui/hyperspeed.conf" << 'EOF'
+---
+name: HyperSpeed Pro
+url: hyperspeed/index.html
+icon: hyperspeed-icon.svg
+description: Advanced Performance Optimization & Caching
+group: software
+order: 10
+version: 1.0.0
+EOF
+
+echo -e "${GREEN}✓ Registered with cPanel${NC}"
+
+# Create user data directory structure
+echo -e "${YELLOW}Creating user data structure...${NC}"
+
+mkdir -p /var/cpanel/hyperspeed_pro
+chmod 755 /var/cpanel/hyperspeed_pro
+
+echo -e "${GREEN}✓ Data structure created${NC}"
+
+# Rebuild cPanel themes
+echo -e "${YELLOW}Rebuilding cPanel themes...${NC}"
+
+/usr/local/cpanel/bin/rebuild_sprites > /dev/null 2>&1 || true
+/usr/local/cpanel/scripts/rebuildhttpdconf > /dev/null 2>&1 || true
+
+echo -e "${GREEN}✓ Themes rebuilt${NC}"
+
+# Create sync service
+echo -e "${YELLOW}Installing sync service...${NC}"
+
+cat > /etc/systemd/system/hyperspeed-cpanel-sync.service << 'EOF'
+[Unit]
+Description=HyperSpeed Pro cPanel-WHM Sync Service
+After=network.target hyperspeed-engine.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/cpanel/scripts/hyperspeed-sync
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create sync script
+cat > /usr/local/cpanel/scripts/hyperspeed-sync << 'EOFSCRIPT'
+#!/bin/bash
+# Sync cPanel user settings with WHM master settings
+while true; do
+    /usr/bin/php /usr/local/cpanel/lib/hyperspeed_pro/sync-users.php
+    sleep 60
+done
+EOFSCRIPT
+
+chmod +x /usr/local/cpanel/scripts/hyperspeed-sync
+
+systemctl daemon-reload
+systemctl enable hyperspeed-cpanel-sync.service
+systemctl start hyperspeed-cpanel-sync.service
+
+echo -e "${GREEN}✓ Sync service installed${NC}"
+
+# Final message
+echo ""
+echo -e "${GREEN}========================================${NC}"
+echo -e "${GREEN}Installation Complete!${NC}"
+echo -e "${GREEN}========================================${NC}"
+echo ""
+echo -e "cPanel users can now access HyperSpeed Pro from:"
+echo -e "${YELLOW}cPanel → Software → HyperSpeed Pro${NC}"
+echo ""
+echo -e "Features available to users:"
+echo -e "  ✓ Per-domain cache management"
+echo -e "  ✓ Performance analytics"
+echo -e "  ✓ Custom bypass rules"
+echo -e "  ✓ Security settings"
+echo -e "  ✓ Resource monitoring"
+echo ""
+echo -e "Sync service status: ${GREEN}$(systemctl is-active hyperspeed-cpanel-sync)${NC}"
+echo ""
+
+exit 0
