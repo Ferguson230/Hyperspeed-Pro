@@ -216,7 +216,7 @@ echo ""
 cd hyperspeed-pro/hyperspeed-pro
 chmod +x install.sh
 
-if./install.sh; then
+if ./install.sh; then
     echo ""
     echo -e "${GREEN}✓${NC} WHM Plugin installed successfully"
 else
