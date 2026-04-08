@@ -134,7 +134,7 @@ echo "  • Nginx extras"
 echo "  • Performance optimization engine"
 echo "  • Security protection module"
 echo ""
-read -p "Continue with installation? [y/N] " -n 1 -r
+read -p "Continue with installation? [y/N] " -n 1 -r < /dev/tty
 echo
 if [[ ! $REPLY =~ ^[Yy]$ ]]; then
     echo "Installation cancelled"
