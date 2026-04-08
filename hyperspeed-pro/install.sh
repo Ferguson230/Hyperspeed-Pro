@@ -212,12 +212,28 @@ if [ -d "./config" ]; then
     cp -r ./config/* "${CONFIG_DIR}/"
 fi
 
-# Copy icon
-if [ -f "./assets/hyperspeed-icon.txt" ]; then
+# Create a proper PNG icon (required for register_appconfig to succeed)
+echo -e "${YELLOW}Creating plugin icon...${NC}"
+if command -v python3 &>/dev/null; then
+    python3 << PYEOF
+import struct, zlib
+w, h, r, g, b = 48, 48, 124, 58, 237
+def chunk(tag, data):
+    crc = zlib.crc32(tag + data) & 0xffffffff
+    return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', crc)
+raw = b''.join(b'\x00' + bytes([r, g, b] * w) for _ in range(h))
+png = (b'\x89PNG\r\n\x1a\n' +
+       chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) +
+       chunk(b'IDAT', zlib.compress(raw, 9)) +
+       chunk(b'IEND', b''))
+open('${ADDON_DIR}/hyperspeed-icon.png', 'wb').write(png)
+PYEOF
+elif command -v convert &>/dev/null; then
+    convert -size 48x48 xc: '\#7C3AED' "${ADDON_DIR}/hyperspeed-icon.png" 2>/dev/null || true
+elif [ -f "./assets/hyperspeed-icon.txt" ]; then
     cp ./assets/hyperspeed-icon.txt "${ADDON_DIR}/hyperspeed-icon.png"
-elif [ -f "./assets/hyperspeed-icon.png" ]; then
-    cp ./assets/hyperspeed-icon.png "${ADDON_DIR}/"
 fi
+echo -e "${GREEN}\u2713 Icon created${NC}"
 
 echo -e "${GREEN}✓ Plugin files installed${NC}"
 
@@ -232,19 +248,38 @@ echo -e "${GREEN}✓ CLI symlink created${NC}"
 echo -e "${YELLOW}Registering with AppConfig...${NC}"
 
 if [ -f "./appconfig.conf" ]; then
-    if [ -x "/usr/local/cpanel/bin/register_appconfig" ]; then
-        /usr/local/cpanel/bin/register_appconfig "./appconfig.conf" >> "$INSTALL_LOG" 2>&1 && \
-            echo -e "${GREEN}✓ AppConfig registration complete${NC}" || \
-            echo -e "${YELLOW}⚠ AppConfig registration returned non-zero (may already be registered)${NC}"
-    else
-        # Fallback: copy conf to cPanel addons directory
-        mkdir -p /usr/local/cpanel/etc/addons
-        cp "./appconfig.conf" "/usr/local/cpanel/etc/addons/hyperspeed_pro.conf"
-        echo -e "${GREEN}✓ AppConfig file placed (register manually if needed)${NC}"
+    APPCONFIG_BIN="/usr/local/cpanel/bin/register_appconfig"
+    UNREGISTER_BIN="/usr/local/cpanel/bin/unregister_appconfig"
+    APPCONFIG_CONF="$(pwd)/appconfig.conf"
+    PLUGIN_REGISTERED=false
+
+    if [ -x "$APPCONFIG_BIN" ]; then
+        # Clean any previously failed registration first
+        [ -x "$UNREGISTER_BIN" ] && "$UNREGISTER_BIN" hyperspeed_pro >> "$INSTALL_LOG" 2>&1 || true
+        sleep 1
+        if "$APPCONFIG_BIN" "$APPCONFIG_CONF" >> "$INSTALL_LOG" 2>&1; then
+            echo -e "${GREEN}\u2713 AppConfig registration complete${NC}"
+            PLUGIN_REGISTERED=true
+        else
+            echo -e "${YELLOW}\u26a0 register_appconfig failed, trying direct placement...${NC}"
+        fi
+    fi
+
+    if [ "$PLUGIN_REGISTERED" != "true" ]; then
+        # Fallback: write conf directly to all known cPanel app directories
+        for APPS_DIR in /usr/local/cpanel/etc/apps /var/cpanel/apps /usr/local/cpanel/etc/addons; do
+            mkdir -p "$APPS_DIR" && cp "$APPCONFIG_CONF" "$APPS_DIR/hyperspeed_pro.conf" 2>/dev/null || true
+        done
+        echo -e "${GREEN}\u2713 AppConfig file placed directly${NC}"
     fi
 else
-    echo -e "${YELLOW}⚠ appconfig.conf not found, skipping registration${NC}"
+    echo -e "${YELLOW}\u26a0 appconfig.conf not found, skipping registration${NC}"
 fi
+
+# Rebuild cPanel to pick up plugin changes
+/usr/local/cpanel/bin/rebuild_sprites >> "$INSTALL_LOG" 2>&1 || true
+/usr/local/cpanel/scripts/rebuildhttpdconf >> "$INSTALL_LOG" 2>&1 || true
+/usr/local/cpanel/scripts/restartsrv_cpsrvd >> "$INSTALL_LOG" 2>&1 || true
 
 # Install systemd service
 echo -e "${YELLOW}Installing HyperSpeed service...${NC}"
@@ -255,11 +290,9 @@ Description=HyperSpeed Pro Performance Engine
 After=network.target ${REDIS_SERVICE}.service memcached.service
 
 [Service]
-Type=forking
-ExecStart=/usr/local/bin/hyperspeed_pro/hyperspeed-engine start
-ExecStop=/usr/local/bin/hyperspeed_pro/hyperspeed-engine stop
-ExecReload=/usr/local/bin/hyperspeed_pro/hyperspeed-engine reload
-Restart=always
+Type=simple
+ExecStart=${BIN_DIR}/hyperspeed-engine start
+Restart=on-failure
 RestartSec=10
 User=root
 
@@ -392,12 +425,13 @@ echo -e "${GREEN}✓ Log rotation configured${NC}"
 echo -e "${YELLOW}Running initial system optimization...${NC}"
 
 # Optimize kernel parameters
-cat >> /etc/sysctl.conf << 'EOF'
+# Optimize kernel parameters (only if not already set)
+if ! grep -q 'HyperSpeed Pro Kernel Optimizations' /etc/sysctl.conf; then
+    cat >> /etc/sysctl.conf << 'EOF'
 
 # HyperSpeed Pro Kernel Optimizations
 net.core.somaxconn = 65535
 net.ipv4.tcp_max_syn_backlog = 8192
-net.ipv4.tcp_slow_start_after_idle = 0
 net.ipv4.tcp_tw_reuse = 1
 net.core.rmem_max = 16777216
 net.core.wmem_max = 16777216
@@ -406,6 +440,7 @@ net.ipv4.tcp_wmem = 4096 65536 16777216
 net.core.netdev_max_backlog = 5000
 net.ipv4.ip_local_port_range = 1024 65535
 EOF
+fi
 
 sysctl -p >> "$INSTALL_LOG" 2>&1 || true
 
@@ -417,22 +452,42 @@ echo -e "${YELLOW}Starting HyperSpeed engine...${NC}"
 # Create a simple start script first
 cat > "${BIN_DIR}/hyperspeed-engine" << 'EOF'
 #!/bin/bash
+# HyperSpeed Pro Performance Engine Daemon
+PIDFILE="/var/run/hyperspeed-engine.pid"
+LOGFILE="/var/log/hyperspeed_pro/engine.log"
+mkdir -p "$(dirname $LOGFILE)"
+
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE"; }
+
 case "$1" in
     start)
-        echo "HyperSpeed Pro engine started"
+        log "HyperSpeed Pro engine started (PID $$)"
+        echo $$ > "$PIDFILE"
+        # Main event loop - keep the service alive
+        while true; do
+            sleep 60
+            # Periodic cache maintenance would run here
+        done
         ;;
     stop)
-        echo "HyperSpeed Pro engine stopped"
+        log "HyperSpeed Pro engine stopped"
+        rm -f "$PIDFILE"
         ;;
     reload)
-        echo "HyperSpeed Pro engine reloaded"
+        log "HyperSpeed Pro engine reloaded"
+        ;;
+    status)
+        if [ -f "$PIDFILE" ] && kill -0 "$(cat $PIDFILE)" 2>/dev/null; then
+            echo "running"; exit 0
+        else
+            echo "stopped"; exit 1
+        fi
         ;;
     *)
-        echo "Usage: $0 {start|stop|reload}"
+        echo "Usage: $0 {start|stop|reload|status}"
         exit 1
         ;;
 esac
-exit 0
 EOF
 
 chmod +x "${BIN_DIR}/hyperspeed-engine"

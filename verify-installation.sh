@@ -81,15 +81,15 @@ echo ""
 echo -e "${BLUE}[2/8] Checking WHM Plugin Installation...${NC}"
 
 # Check WHM plugin directory
-if [ -d "/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed" ]; then
+if [ -d "/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed_pro" ]; then
     check_status 0 "WHM plugin directory exists"
 else
-    check_status 1 "WHM plugin directory not found"
+    check_status 1 "WHM plugin directory not found (/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed_pro)"  
 fi
 
 # Check key WHM files
 files=(
-    "/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed/index.cgi"
+    "/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed_pro/index.cgi"
     "/usr/local/cpanel/lib/hyperspeed_pro/PerformanceEngine.php"
     "/usr/local/cpanel/lib/hyperspeed_pro/SecurityEngine.php"
     "/etc/hyperspeed_pro/hyperspeed.conf"
@@ -255,18 +255,17 @@ echo ""
 ##############################################################################
 echo -e "${BLUE}[7/8] Testing UAPI Functionality...${NC}"
 
-# Check if UAPI module is registered
-if /usr/local/cpanel/bin/uapi --list 2>/dev/null | grep -q "HyperSpeed"; then
-    check_status 0 "UAPI module registered"
-    
-    # List available functions
-    echo -e "  ${GREEN}→${NC} Available UAPI functions:"
-    /usr/local/cpanel/bin/uapi --list | grep -A 20 "HyperSpeed" | grep "^  " | while read func; do
-        echo -e "    ${GREEN}•${NC} $func"
-    done
-    
+# Check UAPI module (custom modules don't appear in uapi --list, check file directly)
+if [ -f "/usr/local/cpanel/Cpanel/API/HyperSpeed.pm" ]; then
+    check_status 0 "UAPI module installed"
+    # Verify it parses cleanly
+    if perl -c /usr/local/cpanel/Cpanel/API/HyperSpeed.pm &>/dev/null; then
+        check_status 0 "UAPI module syntax valid"
+    else
+        check_status 1 "UAPI module has syntax errors"
+    fi
 else
-    check_status 1 "UAPI module not registered"
+    check_status 1 "UAPI module not found"
 fi
 
 echo ""
@@ -277,10 +276,10 @@ echo ""
 echo -e "${BLUE}[8/8] Checking File Permissions...${NC}"
 
 # WHM CGI should be executable
-if [ -x "/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed/index.cgi" ]; then
+if [ -x "/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed_pro/index.cgi" ]; then
     check_status 0 "WHM CGI is executable"
 else
-    check_status 1 "WHM CGI permissions incorrect"
+    check_status 1 "WHM CGI not found or not executable: /usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed_pro/index.cgi"
 fi
 
 # CLI tool should be executable
