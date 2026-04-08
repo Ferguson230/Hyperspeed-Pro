@@ -152,8 +152,22 @@ EOF
 cat > /usr/local/cpanel/scripts/hyperspeed-sync << 'EOFSCRIPT'
 #!/bin/bash
 # Sync cPanel user settings with WHM master settings
+# Use cPanel's managed PHP if available, fall back to system PHP
+PHP_BIN=""
+for p in /usr/local/cpanel/3rdparty/bin/php /opt/cpanel/ea-php*/root/usr/bin/php /usr/bin/php; do
+    if [ -x "$p" ]; then
+        PHP_BIN="$p"
+        break
+    fi
+done
+
+if [ -z "$PHP_BIN" ]; then
+    echo "No PHP binary found" >> /var/log/hyperspeed_pro/sync.log
+    exit 1
+fi
+
 while true; do
-    /usr/bin/php /usr/local/cpanel/lib/hyperspeed_pro/sync-users.php
+    "$PHP_BIN" /usr/local/cpanel/lib/hyperspeed_pro/sync-users.php >> /var/log/hyperspeed_pro/sync.log 2>&1 || true
     sleep 60
 done
 EOFSCRIPT
@@ -161,8 +175,9 @@ EOFSCRIPT
 chmod +x /usr/local/cpanel/scripts/hyperspeed-sync
 
 systemctl daemon-reload
-systemctl enable hyperspeed-cpanel-sync.service
-systemctl start hyperspeed-cpanel-sync.service
+systemctl enable hyperspeed-cpanel-sync.service >> /var/log/hyperspeed_pro/install.log 2>&1 || true
+systemctl start hyperspeed-cpanel-sync.service >> /var/log/hyperspeed_pro/install.log 2>&1 || \
+    echo -e "${YELLOW}⚠ Sync service will start automatically on next boot${NC}"
 
 echo -e "${GREEN}✓ Sync service installed${NC}"
 

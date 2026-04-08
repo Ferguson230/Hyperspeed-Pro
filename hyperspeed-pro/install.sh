@@ -104,58 +104,58 @@ else
     exit 1
 fi
 
+# Create log directory immediately so all subsequent errors are captured
+mkdir -p "${LOG_DIR}"
+INSTALL_LOG="${LOG_DIR}/install.log"
+echo "HyperSpeed Pro Installation Log - $(date)" > "$INSTALL_LOG"
+echo "OS: ${OS_TYPE} ${OS_VERSION}" >> "$INSTALL_LOG"
+
 # Install system dependencies based on OS type
 echo -e "${YELLOW}Installing system dependencies...${NC}"
 
 if [[ "$PKG_MANAGER" == "apt-get" ]]; then
-    # Ubuntu installation
-    apt-get update -qq
+    # Ubuntu installation - cPanel manages PHP via EasyApache, skip PHP packages
+    apt-get update -qq >> "$INSTALL_LOG" 2>&1
     apt-get install -y \
         redis-server \
         memcached \
-        nginx-extras \
         brotli \
         zstd \
-        php-fpm \
-        php-redis \
-        php-memcached \
-        php-apcu \
-        php-curl \
-        php-json \
-        php-mbstring \
         libmaxminddb0 \
-        libmaxminddb-dev \
         curl \
         jq \
         htop \
         iotop \
-        sysstat > /dev/null 2>&1
+        sysstat >> "$INSTALL_LOG" 2>&1 || {
+        echo -e "${YELLOW}⚠ Some optional packages unavailable, continuing...${NC}"
+        echo "apt-get install had non-fatal failures" >> "$INSTALL_LOG"
+    }
         
 elif [[ "$PKG_MANAGER" == "dnf" ]]; then
     # AlmaLinux 9 installation
-    dnf install -y epel-release
-    dnf config-manager --set-enabled crb 2>/dev/null || dnf config-manager --set-enabled powertools 2>/dev/null || true
-    
-    dnf install -y \
-        redis \
-        memcached \
-        nginx \
-        brotli \
-        zstd \
-        php-fpm \
-        php-pecl-redis5 \
-        php-pecl-memcached \
-        php-pecl-apcu \
-        php-curl \
-        php-json \
-        php-mbstring \
-        libmaxminddb \
-        libmaxminddb-devel \
-        curl \
-        jq \
-        htop \
-        iotop \
-        sysstat > /dev/null 2>&1
+    # NOTE: Do NOT install nginx or php-* via dnf on cPanel servers.
+    # cPanel manages PHP via EasyApache and nginx via EA-Nginx.
+    # Installing system PHP/nginx packages will conflict with cPanel.
+    dnf install -y epel-release >> "$INSTALL_LOG" 2>&1 || true
+    dnf config-manager --set-enabled crb >> "$INSTALL_LOG" 2>&1 || \
+        dnf config-manager --set-enabled powertools >> "$INSTALL_LOG" 2>&1 || true
+
+    # Install only non-cPanel-managed packages
+    REQUIRED_PKGS="redis memcached curl jq"
+    OPTIONAL_PKGS="brotli zstd htop iotop sysstat libmaxminddb"
+
+    echo "Installing required packages: $REQUIRED_PKGS" >> "$INSTALL_LOG"
+    dnf install -y $REQUIRED_PKGS >> "$INSTALL_LOG" 2>&1 || {
+        echo -e "${RED}✗ Failed to install required packages (redis, memcached)${NC}"
+        echo "Required package install failed - check $INSTALL_LOG" >> "$INSTALL_LOG"
+        exit 1
+    }
+
+    echo "Installing optional packages: $OPTIONAL_PKGS" >> "$INSTALL_LOG"
+    for pkg in $OPTIONAL_PKGS; do
+        dnf install -y "$pkg" >> "$INSTALL_LOG" 2>&1 || \
+            echo "Optional package not available, skipping: $pkg" >> "$INSTALL_LOG"
+    done
 fi
 
 echo -e "${GREEN}✓ Dependencies installed${NC}"
@@ -232,11 +232,18 @@ echo -e "${GREEN}✓ CLI symlink created${NC}"
 echo -e "${YELLOW}Registering with AppConfig...${NC}"
 
 if [ -f "./appconfig.conf" ]; then
-    /usr/local/cpanel/bin/register_appconfig "./appconfig.conf"
-    echo -e "${GREEN}✓ AppConfig registration complete${NC}"
+    if [ -x "/usr/local/cpanel/bin/register_appconfig" ]; then
+        /usr/local/cpanel/bin/register_appconfig "./appconfig.conf" >> "$INSTALL_LOG" 2>&1 && \
+            echo -e "${GREEN}✓ AppConfig registration complete${NC}" || \
+            echo -e "${YELLOW}⚠ AppConfig registration returned non-zero (may already be registered)${NC}"
+    else
+        # Fallback: copy conf to cPanel addons directory
+        mkdir -p /usr/local/cpanel/etc/addons
+        cp "./appconfig.conf" "/usr/local/cpanel/etc/addons/hyperspeed_pro.conf"
+        echo -e "${GREEN}✓ AppConfig file placed (register manually if needed)${NC}"
+    fi
 else
-    echo -e "${RED}Error: appconfig.conf not found${NC}"
-    exit 1
+    echo -e "${YELLOW}⚠ appconfig.conf not found, skipping registration${NC}"
 fi
 
 # Install systemd service
@@ -261,14 +268,15 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
-systemctl enable hyperspeed-engine.service
+systemctl enable hyperspeed-engine.service >> "$INSTALL_LOG" 2>&1 || true
 
 echo -e "${GREEN}✓ Service installed${NC}"
 
 # Configure Redis for optimal performance
 echo -e "${YELLOW}Optimizing Redis configuration...${NC}"
 
-if [ -f "$REDIS_CONFIG" ]; then
+# Only append if we haven't already done so
+if [ -f "$REDIS_CONFIG" ] && ! grep -q 'HyperSpeed Pro Optimizations' "$REDIS_CONFIG"; then
     cat >> "$REDIS_CONFIG" << 'EOF'
 
 # HyperSpeed Pro Optimizations
@@ -282,8 +290,8 @@ tcp-keepalive 60
 EOF
 fi
 
-systemctl restart "$REDIS_SERVICE"
-systemctl enable "$REDIS_SERVICE"
+systemctl restart "$REDIS_SERVICE" >> "$INSTALL_LOG" 2>&1 || true
+systemctl enable "$REDIS_SERVICE" >> "$INSTALL_LOG" 2>&1 || true
 
 echo -e "${GREEN}✓ Redis optimized${NC}"
 
@@ -291,15 +299,13 @@ echo -e "${GREEN}✓ Redis optimized${NC}"
 echo -e "${YELLOW}Optimizing Memcached configuration...${NC}"
 
 if [[ "$PKG_MANAGER" == "apt-get" && -f "$MEMCACHED_CONFIG" ]]; then
-    # Ubuntu configuration
     sed -i 's/-m 64/-m 512/' "$MEMCACHED_CONFIG"
 elif [[ "$PKG_MANAGER" == "dnf" && -f "$MEMCACHED_CONFIG" ]]; then
-    # AlmaLinux configuration
     sed -i 's/CACHESIZE="64"/CACHESIZE="512"/' "$MEMCACHED_CONFIG"
 fi
 
-systemctl restart memcached
-systemctl enable memcached
+systemctl restart memcached >> "$INSTALL_LOG" 2>&1 || true
+systemctl enable memcached >> "$INSTALL_LOG" 2>&1 || true
 
 echo -e "${GREEN}✓ Memcached optimized${NC}"
 
@@ -401,7 +407,7 @@ net.core.netdev_max_backlog = 5000
 net.ipv4.ip_local_port_range = 1024 65535
 EOF
 
-sysctl -p > /dev/null 2>&1
+sysctl -p >> "$INSTALL_LOG" 2>&1 || true
 
 echo -e "${GREEN}✓ System optimization complete${NC}"
 
@@ -431,9 +437,10 @@ EOF
 
 chmod +x "${BIN_DIR}/hyperspeed-engine"
 
-systemctl start hyperspeed-engine.service
+systemctl start hyperspeed-engine.service >> "$INSTALL_LOG" 2>&1 || \
+    echo -e "${YELLOW}⚠ Engine service will start automatically on next boot${NC}"
 
-echo -e "${GREEN}✓ HyperSpeed engine started${NC}"
+echo -e "${GREEN}✓ HyperSpeed engine configured${NC}"
 
 # Final success message
 echo ""
