@@ -24,7 +24,7 @@ sudo ./quick-install.sh
 
 The installation script will:
 
-1. ✅ Verify system requirements (Ubuntu 22.04/24.04, cPanel/WHM)
+1. ✅ Verify system requirements (Ubuntu 22.04/24.04/AlmaLinux 9, cPanel/WHM)
 2. ✅ Backup existing configurations
 3. ✅ Download latest release from GitHub
 4. ✅ Install dependencies (Redis, Memcached, Nginx extras)
@@ -41,7 +41,7 @@ The installation script will:
 ## System Requirements
 
 **Minimum:**
-- Ubuntu 22.04 or 24.04 LTS
+- **Operating System**: Ubuntu 22.04/24.04 LTS, AlmaLinux 9, or Rocky Linux 9
 - cPanel/WHM 11.110+
 - 2 CPU cores
 - 4 GB RAM

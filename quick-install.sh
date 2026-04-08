@@ -63,15 +63,24 @@ fi
 ###############################################################################
 echo -e "${BLUE}[1/9] Checking system requirements...${NC}"
 
-# Check Ubuntu version
+# Detect OS and version
 if [ -f /etc/os-release ]; then
     . /etc/os-release
-    if [[ "$VERSION_ID" != "22.04" ]] && [[ "$VERSION_ID" != "24.04""]]; then
-        echo -e "${RED}✗ Unsupported Ubuntu version: $VERSION_ID${NC}"
-        echo "  Supported: Ubuntu 22.04 or 24.04 LTS"
+    OS_NAME="$ID"
+    OS_VERSION="$VERSION_ID"
+    
+    # Check for supported OS
+    if [[ "$OS_NAME" == "ubuntu" && ("$OS_VERSION" == "22.04" || "$OS_VERSION" == "24.04") ]]; then
+        echo -e "${GREEN}✓${NC} Ubuntu $OS_VERSION detected"
+    elif [[ "$OS_NAME" == "almalinux" && "$OS_VERSION" =~ ^9\. ]]; then
+        echo -e "${GREEN}✓${NC} AlmaLinux $OS_VERSION detected"
+    elif [[ "$OS_NAME" == "rocky" && "$OS_VERSION" =~ ^9\. ]]; then
+        echo -e "${GREEN}✓${NC} Rocky Linux $OS_VERSION detected"
+    else
+        echo -e "${RED}✗ Unsupported operating system: $ID $VERSION_ID${NC}"
+        echo "  Supported: Ubuntu 22.04/24.04 LTS, AlmaLinux 9, Rocky Linux 9"
         exit 1
     fi
-    echo -e "${GREEN}✓${NC} Ubuntu $VERSION_ID detected"
 else
     echo -e "${RED}✗ Cannot detect OS version${NC}"
     exit 1

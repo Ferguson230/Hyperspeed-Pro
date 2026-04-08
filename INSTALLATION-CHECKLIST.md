@@ -7,7 +7,7 @@
 ## Pre-Installation Checklist
 
 ### System Requirements
-- [ ] Ubuntu 22.04 or 24.04 LTS
+- [ ] **Operating System**: Ubuntu 22.04/24.04 LTS, AlmaLinux 9, or Rocky Linux 9
 - [ ] cPanel/WHM 11.110 or higher installed
 - [ ] Minimum 2 CPU cores, 4GB RAM
 - [ ] Minimum 20GB free disk space

@@ -130,7 +130,7 @@ cd /root/hyperspeed-pro
 ```
 
 **Time**: ~5 minutes  
-**Requires**: Root access, Ubuntu 22.04/24.04
+**Requires**: Root access, Ubuntu 22.04/24.04 or AlmaLinux 9
 
 ### Phase 2: cPanel Plugin (Server Admin)
 
@@ -305,7 +305,7 @@ hyperspeed:domain:<domain.com>:owner
 - VPS: 2 CPU cores, 4GB RAM
 - WordPress 6.4 with WooCommerce
 - 10,000 products, 50,000 visits/day
-- Ubuntu 24.04 LTS
+- AlmaLinux 9 on cPanel
 
 ### Before HyperSpeed Pro
 - **Average Page Load**: 2.8 seconds
@@ -438,7 +438,7 @@ Pattern detection for:
 - 2 CPU cores
 - 4 GB RAM
 - 20 GB disk space
-- Ubuntu 22.04 or 24.04 LTS
+- **Operating System**: Ubuntu 22.04/24.04 LTS, AlmaLinux 9, or Rocky Linux 9
 - cPanel/WHM 11.110+
 
 **Recommended**:
