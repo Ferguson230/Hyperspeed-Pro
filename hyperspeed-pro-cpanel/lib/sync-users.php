@@ -12,9 +12,6 @@
 
 require_once '/usr/local/cpanel/php/cpanel.php';
 
-use Cpanel::cPanelUserConfig;
-use Cpanel::SafeRun::Simple;
-
 class HyperSpeedSync
 {
     private $redis;

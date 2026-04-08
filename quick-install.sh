@@ -134,11 +134,25 @@ echo "  • Nginx extras"
 echo "  • Performance optimization engine"
 echo "  • Security protection module"
 echo ""
-read -p "Continue with installation? [y/N] " -n 1 -r < /dev/tty
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Installation cancelled"
-    exit 0
+# Handle confirmation for both interactive and piped (curl | bash) modes
+if [ -t 0 ]; then
+    # Running interactively - ask for confirmation
+    read -p "Continue with installation? [y/N] " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Installation cancelled"
+        exit 0
+    fi
+else
+    # Running via pipe (curl | bash) - redirect stdin from terminal
+    exec 3</dev/tty
+    read -p "Continue with installation? [y/N] " -n 1 -r <&3
+    exec 3<&-
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Installation cancelled"
+        exit 0
+    fi
 fi
 
 echo ""
@@ -186,7 +200,13 @@ fi
 # Extract archive
 echo "  Extracting files..."
 tar -xzf hyperspeed-pro.tar.gz
-mv "hyperspeed-pro-${VERSION#v}" hyperspeed-pro
+# GitHub archives extract as RepoName-TagVersion/ (case sensitive)
+EXTRACTED_DIR=$(tar -tzf hyperspeed-pro.tar.gz | head -1 | cut -d/ -f1)
+if [ -z "$EXTRACTED_DIR" ] || [ ! -d "$EXTRACTED_DIR" ]; then
+    echo -e "${RED}✗ Extraction failed - could not find extracted directory${NC}"
+    exit 1
+fi
+mv "$EXTRACTED_DIR" hyperspeed-pro
 
 if [ ! -d "hyperspeed-pro" ]; then
     echo -e "${RED}✗ Extraction failed${NC}"
@@ -283,8 +303,10 @@ echo ""
 echo -e "${BLUE}[9/9] Running performance benchmark...${NC}"
 echo ""
 
-if [ -f /usr/local/bin/hyperspeed ]; then
-    /usr/local/bin/hyperspeed benchmark:run 2>/dev/null || echo "  Benchmark will be available after server restart"
+if [ -f /usr/local/bin/hyperspeed_pro/hyperspeed ]; then
+    /usr/local/bin/hyperspeed_pro/hyperspeed test 2>/dev/null || echo "  Benchmark will be available after server restart"
+elif [ -f /usr/local/bin/hyperspeed ]; then
+    /usr/local/bin/hyperspeed test 2>/dev/null || echo "  Benchmark will be available after server restart"
 fi
 
 echo ""

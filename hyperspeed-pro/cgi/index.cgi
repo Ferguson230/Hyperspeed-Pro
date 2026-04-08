@@ -13,7 +13,7 @@ use Cpanel::SafeRun::Simple ();
 use Cpanel::AdminBin ();
 
 # Security check
-if ($ENV{REMOTE_USER} eq '') {
+unless ($ENV{REMOTE_USER}) {
     print "Content-type: text/plain\r\n\r\n";
     print "Access denied. Must be authenticated WHM user.\n";
     exit;
@@ -71,8 +71,8 @@ sub show_dashboard {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HyperSpeed Pro Dashboard</title>
-    <link rel="stylesheet" href="/templates/hyperspeed/assets/style.css">
-    <script src="/templates/hyperspeed/assets/dashboard.js"></script>
+    <link rel="stylesheet" href="/whostmgr/docroot/cgi/hyperspeed_pro/assets/style.css">
+    <script src="/whostmgr/docroot/cgi/hyperspeed_pro/assets/dashboard.js"></script>
 </head>
 <body class="hyperspeed-dashboard">
     <div class="container">
@@ -249,7 +249,7 @@ sub show_settings {
 <head>
     <meta charset="UTF-8">
     <title>HyperSpeed Pro - Settings</title>
-    <link rel="stylesheet" href="/templates/hyperspeed/assets/style.css">
+    <link rel="stylesheet" href="/whostmgr/docroot/cgi/hyperspeed_pro/assets/style.css">
 </head>
 <body class="hyperspeed-dashboard">
     <div class="container">
@@ -426,10 +426,58 @@ sub handle_api {
 
 sub show_security {
     my ($cgi, $config) = @_;
-    # Implementation for security dashboard
+
+    print $cgi->header('text/html');
+    print <<'HTML';
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>HyperSpeed Pro - Security</title>
+<link rel="stylesheet" href="/whostmgr/docroot/cgi/hyperspeed_pro/assets/style.css"></head>
+<body class="hyperspeed-dashboard"><div class="container">
+<header class="dashboard-header"><h1>HyperSpeed Pro - Security</h1></header>
+<nav class="main-nav">
+<a href="?action=dashboard">Dashboard</a>
+<a href="?action=cache">Cache Management</a>
+<a href="?action=security" class="active">Security</a>
+<a href="?action=settings">Settings</a>
+<a href="?action=stats">Statistics</a>
+</nav>
+<div class="settings-section"><h2>Security Status</h2>
+<p>Security engine is active and protecting your server.</p>
+</div></div></body></html>
+HTML
 }
 
 sub show_stats {
     my ($cgi, $config) = @_;
-    # Implementation for statistics page
+
+    my $metrics = get_metrics();
+    my $sec = get_security_stats();
+
+    print $cgi->header('text/html');
+    print <<'HTML';
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>HyperSpeed Pro - Statistics</title>
+<link rel="stylesheet" href="/whostmgr/docroot/cgi/hyperspeed_pro/assets/style.css"></head>
+<body class="hyperspeed-dashboard"><div class="container">
+<header class="dashboard-header"><h1>HyperSpeed Pro - Statistics</h1></header>
+<nav class="main-nav">
+<a href="?action=dashboard">Dashboard</a>
+<a href="?action=cache">Cache Management</a>
+<a href="?action=security">Security</a>
+<a href="?action=settings">Settings</a>
+<a href="?action=stats" class="active">Statistics</a>
+</nav>
+HTML
+
+    my $total = ($metrics->{cache_hit_redis} + $metrics->{cache_hit_memcached} + $metrics->{cache_miss}) || 1;
+    my $hits  = $metrics->{cache_hit_redis} + $metrics->{cache_hit_memcached};
+    my $rate  = sprintf('%.1f', ($hits / $total) * 100);
+
+    print qq{<div class="settings-section"><h2>Cache Performance</h2>};
+    print qq{<p>Total Requests: $total | Cache Hits: $hits | Hit Rate: $rate%</p>};
+    print qq{<p>Redis Hits: $metrics->{cache_hit_redis} | Memcached Hits: $metrics->{cache_hit_memcached} | Misses: $metrics->{cache_miss}</p>};
+    print qq{</div>};
+    print qq{<div class="settings-section"><h2>Security Events</h2>};
+    print qq{<p>Blocked Requests: $sec->{blocked_requests} | Blacklisted IPs: $sec->{blacklisted_ips} | DDoS Attacks: $sec->{ddos_attacks}</p>};
+    print qq{</div></div></body></html>};
 }

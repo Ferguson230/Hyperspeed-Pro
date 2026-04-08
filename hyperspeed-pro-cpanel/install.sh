@@ -85,11 +85,13 @@ fi
 
 # Set permissions
 chmod 755 "${PLUGIN_DIR}"
-chmod 644 "${PLUGIN_DIR}"/*.html
-chmod 644 "${PLUGIN_DIR}"/assets/*
+find "${PLUGIN_DIR}" -name "*.html" -exec chmod 644 {} \; 2>/dev/null || true
+find "${PLUGIN_DIR}/assets" -type f -exec chmod 644 {} \; 2>/dev/null || true
 chmod 755 "${API_DIR}"
-chmod 644 "${API_DIR}"/*.pm
-chmod 644 "${UAPI_DIR}/HyperSpeed.pm"
+find "${API_DIR}" -name "*.pm" -exec chmod 644 {} \; 2>/dev/null || true
+if [ -f "${UAPI_DIR}/HyperSpeed.pm" ]; then
+    chmod 644 "${UAPI_DIR}/HyperSpeed.pm"
+fi
 
 echo -e "${GREEN}✓ Plugin files installed${NC}"
 
@@ -97,7 +99,9 @@ echo -e "${GREEN}✓ Plugin files installed${NC}"
 echo -e "${YELLOW}Registering with cPanel...${NC}"
 
 # Install dynamicui configuration
-cat > "${CPANEL_BASE}/etc/cpanel/dynamicui/hyperspeed.conf" << 'EOF'
+DYNAMICUI_DIR="${CPANEL_BASE}/etc/cpanel/dynamicui"
+mkdir -p "${DYNAMICUI_DIR}"
+cat > "${DYNAMICUI_DIR}/hyperspeed.conf" << 'EOF'
 ---
 name: HyperSpeed Pro
 url: hyperspeed/index.html

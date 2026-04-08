@@ -48,11 +48,20 @@ check_warning() {
 ##############################################################################
 echo -e "${BLUE}[1/8] Checking System Requirements...${NC}"
 
-# Ubuntu version
-if cat /etc/os-release | grep -q "22.04\|24.04"; then
-    check_status 0 "Ubuntu 22.04 or 24.04 detected"
+# Supported OS check (Ubuntu, AlmaLinux, Rocky Linux)
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    if [[ "$ID" == "ubuntu" && ("$VERSION_ID" == "22.04" || "$VERSION_ID" == "24.04") ]]; then
+        check_status 0 "Ubuntu $VERSION_ID detected"
+    elif [[ "$ID" == "almalinux" && "$VERSION_ID" =~ ^9\. ]]; then
+        check_status 0 "AlmaLinux $VERSION_ID detected"
+    elif [[ "$ID" == "rocky" && "$VERSION_ID" =~ ^9\. ]]; then
+        check_status 0 "Rocky Linux $VERSION_ID detected"
+    else
+        check_status 1 "Unsupported OS: $ID $VERSION_ID (supported: Ubuntu 22.04/24.04, AlmaLinux 9, Rocky Linux 9)"
+    fi
 else
-    check_status 1 "Ubuntu 22.04 or 24.04 required"
+    check_status 1 "Cannot detect operating system"
 fi
 
 # cPanel version
@@ -139,7 +148,7 @@ echo ""
 echo -e "${BLUE}[4/8] Checking Dependencies...${NC}"
 
 # Redis
-if systemctl is-active --quiet redis; then
+if systemctl is-active --quiet redis || systemctl is-active --quiet redis-server; then
     check_status 0 "Redis is running"
     redis_version=$(redis-cli --version | awk '{print $2}')
     echo -e "  ${GREEN}→${NC} Redis version: $redis_version"
@@ -275,7 +284,7 @@ else
 fi
 
 # CLI tool should be executable
-if [ -x "/usr/local/bin/hyperspeed" ]; then
+if [ -x "/usr/local/bin/hyperspeed" ] || [ -x "/usr/local/bin/hyperspeed_pro/hyperspeed" ]; then
     check_status 0 "CLI tool is executable"
 else
     check_status 1 "CLI tool permissions incorrect"

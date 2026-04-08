@@ -82,7 +82,13 @@ if [ -f /etc/os-release ]; then
     else
         echo -e "${RED}Warning: This plugin is optimized for Ubuntu 22.04/24.04 or AlmaLinux 9${NC}"
         echo -e "${YELLOW}Detected: $ID $VERSION_ID${NC}"
-        read -p "Continue anyway? (y/n) " -n 1 -r
+        if [ -t 0 ]; then
+            read -p "Continue anyway? (y/n) " -n 1 -r
+        else
+            exec 3</dev/tty
+            read -p "Continue anyway? (y/n) " -n 1 -r <&3
+            exec 3<&-
+        fi
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             exit 1
@@ -181,7 +187,13 @@ echo -e "${YELLOW}Installing plugin files...${NC}"
 # Copy CGI files
 if [ -d "./cgi" ]; then
     cp -r ./cgi/* "${PLUGIN_DIR}/"
-    chmod +x "${PLUGIN_DIR}"/*.cgi
+    find "${PLUGIN_DIR}" -name "*.cgi" -exec chmod +x {} \;
+fi
+
+# Copy web assets (CSS, JS) to plugin directory
+if [ -d "./assets" ]; then
+    mkdir -p "${PLUGIN_DIR}/assets"
+    cp -r ./assets/dashboard.js ./assets/style.css "${PLUGIN_DIR}/assets/" 2>/dev/null || true
 fi
 
 # Copy library files
@@ -192,7 +204,7 @@ fi
 # Copy binary files
 if [ -d "./bin" ]; then
     cp -r ./bin/* "${BIN_DIR}/"
-    chmod +x "${BIN_DIR}"/*
+    find "${BIN_DIR}" -type f -exec chmod +x {} \;
 fi
 
 # Copy configuration templates
@@ -201,13 +213,22 @@ if [ -d "./config" ]; then
 fi
 
 # Copy icon
-if [ -f "./assets/hyperspeed-icon.png" ]; then
+if [ -f "./assets/hyperspeed-icon.txt" ]; then
+    cp ./assets/hyperspeed-icon.txt "${ADDON_DIR}/hyperspeed-icon.png"
+elif [ -f "./assets/hyperspeed-icon.png" ]; then
     cp ./assets/hyperspeed-icon.png "${ADDON_DIR}/"
 fi
 
 echo -e "${GREEN}✓ Plugin files installed${NC}"
 
-# Register with AppConfig
+# Create symlink for easy CLI access
+echo -e "${YELLOW}Creating CLI symlink...${NC}"
+if [ ! -L "/usr/local/bin/hyperspeed" ] && [ ! -f "/usr/local/bin/hyperspeed" ]; then
+    ln -s "${BIN_DIR}/hyperspeed" /usr/local/bin/hyperspeed
+fi
+chmod +x "${BIN_DIR}/hyperspeed"
+
+echo -e "${GREEN}✓ CLI symlink created${NC}"
 echo -e "${YELLOW}Registering with AppConfig...${NC}"
 
 if [ -f "./appconfig.conf" ]; then
