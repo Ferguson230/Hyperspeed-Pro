@@ -9,30 +9,41 @@ use warnings;
 use Cpanel::Logger ();
 use Cpanel::JSON ();
 use Cpanel::SafeRun::Simple ();
-use Redis;
+
+# Redis is loaded lazily at runtime only so that perl -c compilation
+# succeeds even when the Redis Perl module is not installed in cPanel's Perl path
+my $REDIS_LOADED = 0;
 
 our $VERSION = '1.0.0';
 
 my $logger = Cpanel::Logger->new();
 my $redis;
 
-# Initialize Redis connection
+# Initialize Redis connection (lazy-loads the Redis module at first call)
 sub _init_redis {
     return $redis if $redis;
-    
+
+    unless ($REDIS_LOADED) {
+        eval { require Redis; $REDIS_LOADED = 1 };
+        if ($@) {
+            $logger->warn("Redis Perl module not available: $@");
+            return undef;
+        }
+    }
+
     eval {
         $redis = Redis->new(
-            server => '127.0.0.1:6379',
+            server    => '127.0.0.1:6379',
             reconnect => 60,
-            every => 1000,
+            every     => 1000,
         );
     };
-    
+
     if ($@) {
         $logger->warn("Failed to connect to Redis: $@");
         return undef;
     }
-    
+
     return $redis;
 }
 

@@ -56,21 +56,26 @@ echo -e "${YELLOW}Installing cPanel user interface...${NC}"
 
 # Directories
 CPANEL_BASE="/usr/local/cpanel"
-PLUGIN_DIR="${CPANEL_BASE}/base/frontend/paper_lantern/hyperspeed"
+PLUGIN_DIR_PL="${CPANEL_BASE}/base/frontend/paper_lantern/hyperspeed"
+PLUGIN_DIR_JP="${CPANEL_BASE}/base/frontend/jupiter/hyperspeed"
+PLUGIN_DIR="${PLUGIN_DIR_PL}"  # keep alias for legacy references below
 API_DIR="${CPANEL_BASE}/Cpanel/API/HyperSpeed"
 UAPI_DIR="${CPANEL_BASE}/Cpanel/API"
 SCRIPTS_DIR="${CPANEL_BASE}/scripts"
 
-# Create directories
-mkdir -p "${PLUGIN_DIR}"
-mkdir -p "${PLUGIN_DIR}/assets"
+# Create directories for both Paper Lantern and Jupiter themes
+mkdir -p "${PLUGIN_DIR_PL}"
+mkdir -p "${PLUGIN_DIR_PL}/assets"
+mkdir -p "${PLUGIN_DIR_JP}"
+mkdir -p "${PLUGIN_DIR_JP}/assets"
 mkdir -p "${API_DIR}"
 
 echo -e "${YELLOW}Copying plugin files...${NC}"
 
-# Copy interface files
+# Copy interface files to both themes
 if [ -d "./cpanel-interface" ]; then
-    cp -r ./cpanel-interface/* "${PLUGIN_DIR}/"
+    cp -r ./cpanel-interface/* "${PLUGIN_DIR_PL}/"
+    cp -r ./cpanel-interface/* "${PLUGIN_DIR_JP}/"
 fi
 
 # Copy API modules
@@ -83,10 +88,12 @@ if [ -f "./uapi/HyperSpeed.pm" ]; then
     cp ./uapi/HyperSpeed.pm "${UAPI_DIR}/"
 fi
 
-# Set permissions
-chmod 755 "${PLUGIN_DIR}"
-find "${PLUGIN_DIR}" -name "*.html" -exec chmod 644 {} \; 2>/dev/null || true
-find "${PLUGIN_DIR}/assets" -type f -exec chmod 644 {} \; 2>/dev/null || true
+# Set permissions for both themes
+for PDIR in "${PLUGIN_DIR_PL}" "${PLUGIN_DIR_JP}"; do
+    chmod 755 "${PDIR}" 2>/dev/null || true
+    find "${PDIR}" -name "*.html" -exec chmod 644 {} \; 2>/dev/null || true
+    find "${PDIR}/assets" -type f -exec chmod 644 {} \; 2>/dev/null || true
+done
 chmod 755 "${API_DIR}"
 find "${API_DIR}" -name "*.pm" -exec chmod 644 {} \; 2>/dev/null || true
 if [ -f "${UAPI_DIR}/HyperSpeed.pm" ]; then
@@ -98,18 +105,37 @@ echo -e "${GREEN}✓ Plugin files installed${NC}"
 # Register with cPanel
 echo -e "${YELLOW}Registering with cPanel...${NC}"
 
-# Install dynamicui configuration
+# Install dynamicui configuration (YAML format required by cPanel 11.x)
+# The 'feature' field makes the plugin appear in WHM Feature Manager
+# Entries are needed for both Paper Lantern and Jupiter themes
 DYNAMICUI_DIR="${CPANEL_BASE}/etc/cpanel/dynamicui"
 mkdir -p "${DYNAMICUI_DIR}"
 cat > "${DYNAMICUI_DIR}/hyperspeed.conf" << 'EOF'
+dynamicui:
+  - id: hyperspeed_pro_app
+    displayname: HyperSpeed Pro
+    description: Advanced Performance Optimization & Caching
+    url: /frontend/jupiter/hyperspeed/index.html
+    icon: /frontend/jupiter/hyperspeed/assets/hyperspeed-icon.png
+    group: software
+    order: 100
+    feature: hyperspeed_pro
+    type: link
+    acl: nothing
+    themes:
+      paper_lantern:
+        url: /frontend/paper_lantern/hyperspeed/index.html
+        icon: /frontend/paper_lantern/hyperspeed/assets/hyperspeed-icon.png
+EOF
+# Also register feature in WHM Feature Manager
+FEATURE_DIR="${CPANEL_BASE}/etc/cpanel/features"
+mkdir -p "${FEATURE_DIR}"
+cat > "${FEATURE_DIR}/hyperspeed_pro.conf" << 'EOF'
 ---
-name: HyperSpeed Pro
-url: hyperspeed/index.html
-icon: hyperspeed-icon.svg
-description: Advanced Performance Optimization & Caching
-group: software
-order: 10
-version: 1.0.0
+id: hyperspeed_pro
+label: HyperSpeed Pro
+description: Advanced performance optimization and caching
+enabled: 1
 EOF
 
 echo -e "${GREEN}✓ Registered with cPanel${NC}"

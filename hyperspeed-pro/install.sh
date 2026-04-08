@@ -266,9 +266,20 @@ if [ -f "./appconfig.conf" ]; then
     fi
 
     if [ "$PLUGIN_REGISTERED" != "true" ]; then
-        # Fallback: write conf directly to all known cPanel app directories
-        for APPS_DIR in /usr/local/cpanel/etc/apps /var/cpanel/apps /usr/local/cpanel/etc/addons; do
-            mkdir -p "$APPS_DIR" && cp "$APPCONFIG_CONF" "$APPS_DIR/hyperspeed_pro.conf" 2>/dev/null || true
+        # Fallback: write the STORED YAML format cPanel uses in /var/cpanel/apps/
+        # (not the input format - cPanel stores a different YAML in its apps dir)
+        for APPS_DIR in /var/cpanel/apps /usr/local/cpanel/etc/apps; do
+            mkdir -p "$APPS_DIR" 2>/dev/null || true
+            cat > "$APPS_DIR/hyperspeed_pro.conf" << 'APPCONF'
+---
+name: hyperspeed_pro
+label: HyperSpeed Pro
+description: Advanced server performance optimization and acceleration system
+url: /cgi/hyperspeed_pro/index.cgi
+icon: /addon_plugins/hyperspeed-icon.png
+group: whm
+acl: all
+APPCONF
         done
         echo -e "${GREEN}\u2713 AppConfig file placed directly${NC}"
     fi

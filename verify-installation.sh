@@ -118,25 +118,36 @@ else
     check_status 1 "UAPI module not found"
 fi
 
-# Check cPanel interface in Paper Lantern theme
+# Check cPanel interface in Paper Lantern AND Jupiter themes
 if [ -d "/usr/local/cpanel/base/frontend/paper_lantern/hyperspeed" ]; then
     check_status 0 "cPanel interface (Paper Lantern) installed"
 else
     check_status 1 "cPanel interface (Paper Lantern) not found"
 fi
 
-# Check interface files
-interface_files=(
-    "/usr/local/cpanel/base/frontend/paper_lantern/hyperspeed/index.html"
-    "/usr/local/cpanel/base/frontend/paper_lantern/hyperspeed/assets/dashboard.js"
-    "/usr/local/cpanel/base/frontend/paper_lantern/hyperspeed/assets/style.css"
-)
+if [ -d "/usr/local/cpanel/base/frontend/jupiter/hyperspeed" ]; then
+    check_status 0 "cPanel interface (Jupiter theme) installed"
+else
+    check_status 1 "cPanel interface (Jupiter theme) not found — users may not see plugin"
+fi
 
-for file in "${interface_files[@]}"; do
-    if [ -f "$file" ]; then
-        check_status 0 "Found: $(basename $file)"
-    else
-        check_status 1 "Missing: $(basename $file)"
+# Check interface files (check Jupiter primary, fall back to paper_lantern)
+for theme in jupiter paper_lantern; do
+    theme_dir="/usr/local/cpanel/base/frontend/${theme}/hyperspeed"
+    if [ -d "$theme_dir" ]; then
+        interface_files=(
+            "${theme_dir}/index.html"
+            "${theme_dir}/assets/dashboard.js"
+            "${theme_dir}/assets/style.css"
+        )
+        for file in "${interface_files[@]}"; do
+            if [ -f "$file" ]; then
+                check_status 0 "Found: $(basename $file) [${theme}]"
+            else
+                check_status 1 "Missing: $(basename $file) [${theme}]"
+            fi
+        done
+        break  # only check first found theme
     fi
 done
 
@@ -256,10 +267,14 @@ echo ""
 echo -e "${BLUE}[7/8] Testing UAPI Functionality...${NC}"
 
 # Check UAPI module (custom modules don't appear in uapi --list, check file directly)
-if [ -f "/usr/local/cpanel/Cpanel/API/HyperSpeed.pm" ]; then
+UAPI_MODULE="/usr/local/cpanel/Cpanel/API/HyperSpeed.pm"
+if [ -f "$UAPI_MODULE" ]; then
     check_status 0 "UAPI module installed"
-    # Verify it parses cleanly
-    if perl -c /usr/local/cpanel/Cpanel/API/HyperSpeed.pm &>/dev/null; then
+    # Use cPanel's own Perl (has Cpanel:: modules in @INC) for syntax check
+    CPANEL_PERL="/usr/local/cpanel/3rdparty/bin/perl"
+    PERL_BIN="${CPANEL_PERL}"
+    [ -x "$PERL_BIN" ] || PERL_BIN="perl"
+    if "$PERL_BIN" -c "$UAPI_MODULE" &>/dev/null 2>&1; then
         check_status 0 "UAPI module syntax valid"
     else
         check_status 1 "UAPI module has syntax errors"
