@@ -1,7 +1,9 @@
 #!/bin/bash
 #
 # HyperSpeed Pro - Installation Script
-# Compatible with cPanel & WHM on Ubuntu 22.04 and 24.04
+# Compatible with cPanel & WHM on:
+#   - Ubuntu 22.04 and 24.04 LTS
+#   - AlmaLinux 9
 #
 # This script installs the HyperSpeed Pro performance optimization plugin
 #
@@ -26,6 +28,14 @@ CACHE_DIR="/var/cache/${PLUGIN_NAME}"
 LOG_DIR="/var/log/${PLUGIN_NAME}"
 SERVICE_DIR="/etc/systemd/system"
 
+# OS Detection variables
+OS_TYPE=""
+OS_VERSION=""
+PKG_MANAGER=""
+REDIS_SERVICE=""
+REDIS_CONFIG=""
+MEMCACHED_CONFIG=""
+
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}HyperSpeed Pro Installation${NC}"
 echo -e "${GREEN}========================================${NC}"
@@ -43,47 +53,104 @@ if [ ! -d "/usr/local/cpanel" ]; then
     exit 1
 fi
 
-echo -e "${YELLOW}Checking system requirements...${NC}"
+echo -e "${YELLOW}Detecting operating system...${NC}"
 
-# Check Ubuntu version
+# Detect OS type and version
 if [ -f /etc/os-release ]; then
     . /etc/os-release
-    if [[ "$ID" != "ubuntu" ]] || [[ ! "$VERSION_ID" =~ ^(22|24)\. ]]; then
-        echo -e "${RED}Warning: This plugin is optimized for Ubuntu 22.04 or 24.04${NC}"
+    OS_TYPE="$ID"
+    OS_VERSION="$VERSION_ID"
+    
+    if [[ "$ID" == "ubuntu" && "$VERSION_ID" =~ ^(22|24)\. ]]; then
+        echo -e "${GREEN}✓ Ubuntu $VERSION_ID detected${NC}"
+        PKG_MANAGER="apt-get"
+        REDIS_SERVICE="redis-server"
+        REDIS_CONFIG="/etc/redis/redis.conf"
+        MEMCACHED_CONFIG="/etc/memcached.conf"
+    elif [[ "$ID" == "almalinux" && "$VERSION_ID" =~ ^9\. ]]; then
+        echo -e "${GREEN}✓ AlmaLinux $VERSION_ID detected${NC}"
+        PKG_MANAGER="dnf"
+        REDIS_SERVICE="redis"
+        REDIS_CONFIG="/etc/redis/redis.conf"
+        MEMCACHED_CONFIG="/etc/sysconfig/memcached"
+    elif [[ "$ID" == "rocky" && "$VERSION_ID" =~ ^9\. ]]; then
+        echo -e "${GREEN}✓ Rocky Linux $VERSION_ID detected (using AlmaLinux compatibility)${NC}"
+        PKG_MANAGER="dnf"
+        REDIS_SERVICE="redis"
+        REDIS_CONFIG="/etc/redis/redis.conf"
+        MEMCACHED_CONFIG="/etc/sysconfig/memcached"
+    else
+        echo -e "${RED}Warning: This plugin is optimized for Ubuntu 22.04/24.04 or AlmaLinux 9${NC}"
+        echo -e "${YELLOW}Detected: $ID $VERSION_ID${NC}"
         read -p "Continue anyway? (y/n) " -n 1 -r
         echo
         if [[ ! $REPLY =~ ^[Yy]$ ]]; then
             exit 1
         fi
-    else
-        echo -e "${GREEN}✓ Ubuntu $VERSION_ID detected${NC}"
+        # Default to apt-get for unknown Ubuntu-like systems
+        PKG_MANAGER="apt-get"
+        REDIS_SERVICE="redis-server"
+        REDIS_CONFIG="/etc/redis/redis.conf"
+        MEMCACHED_CONFIG="/etc/memcached.conf"
     fi
+else
+    echo -e "${RED}Error: Cannot detect operating system${NC}"
+    exit 1
 fi
 
-# Install system dependencies
+# Install system dependencies based on OS type
 echo -e "${YELLOW}Installing system dependencies...${NC}"
 
-apt-get update -qq
-apt-get install -y \
-    redis-server \
-    memcached \
-    nginx-extras \
-    brotli \
-    zstd \
-    php-fpm \
-    php-redis \
-    php-memcached \
-    php-apcu \
-    php-curl \
-    php-json \
-    php-mbstring \
-    libmaxminddb0 \
-    libmaxminddb-dev \
-    curl \
-    jq \
-    htop \
-    iotop \
-    sysstat > /dev/null 2>&1
+if [[ "$PKG_MANAGER" == "apt-get" ]]; then
+    # Ubuntu installation
+    apt-get update -qq
+    apt-get install -y \
+        redis-server \
+        memcached \
+        nginx-extras \
+        brotli \
+        zstd \
+        php-fpm \
+        php-redis \
+        php-memcached \
+        php-apcu \
+        php-curl \
+        php-json \
+        php-mbstring \
+        libmaxminddb0 \
+        libmaxminddb-dev \
+        curl \
+        jq \
+        htop \
+        iotop \
+        sysstat > /dev/null 2>&1
+        
+elif [[ "$PKG_MANAGER" == "dnf" ]]; then
+    # AlmaLinux 9 installation
+    dnf install -y epel-release
+    dnf config-manager --set-enabled crb 2>/dev/null || dnf config-manager --set-enabled powertools 2>/dev/null || true
+    
+    dnf install -y \
+        redis \
+        memcached \
+        nginx \
+        brotli \
+        zstd \
+        php-fpm \
+        php-pecl-redis5 \
+        php-pecl-memcached \
+        php-pecl-apcu \
+        php-curl \
+        php-json \
+        php-mbstring \
+        libmaxminddb \
+        libmaxminddb-devel \
+        curl \
+        jq \
+        htop \
+        iotop \
+        sysstat > /dev/null 2>&1
+fi
 
 echo -e "${GREEN}✓ Dependencies installed${NC}"
 
@@ -154,10 +221,10 @@ fi
 # Install systemd service
 echo -e "${YELLOW}Installing HyperSpeed service...${NC}"
 
-cat > "${SERVICE_DIR}/hyperspeed-engine.service" << 'EOF'
+cat > "${SERVICE_DIR}/hyperspeed-engine.service" << EOF
 [Unit]
 Description=HyperSpeed Pro Performance Engine
-After=network.target redis.service memcached.service
+After=network.target ${REDIS_SERVICE}.service memcached.service
 
 [Service]
 Type=forking
@@ -180,7 +247,8 @@ echo -e "${GREEN}✓ Service installed${NC}"
 # Configure Redis for optimal performance
 echo -e "${YELLOW}Optimizing Redis configuration...${NC}"
 
-cat >> /etc/redis/redis.conf << 'EOF'
+if [ -f "$REDIS_CONFIG" ]; then
+    cat >> "$REDIS_CONFIG" << 'EOF'
 
 # HyperSpeed Pro Optimizations
 maxmemory 2gb
@@ -191,16 +259,26 @@ tcp-backlog 65535
 timeout 300
 tcp-keepalive 60
 EOF
+fi
 
-systemctl restart redis-server
+systemctl restart "$REDIS_SERVICE"
+systemctl enable "$REDIS_SERVICE"
 
 echo -e "${GREEN}✓ Redis optimized${NC}"
 
 # Configure Memcached
 echo -e "${YELLOW}Optimizing Memcached configuration...${NC}"
 
-sed -i 's/-m 64/-m 512/' /etc/memcached.conf
+if [[ "$PKG_MANAGER" == "apt-get" && -f "$MEMCACHED_CONFIG" ]]; then
+    # Ubuntu configuration
+    sed -i 's/-m 64/-m 512/' "$MEMCACHED_CONFIG"
+elif [[ "$PKG_MANAGER" == "dnf" && -f "$MEMCACHED_CONFIG" ]]; then
+    # AlmaLinux configuration
+    sed -i 's/CACHESIZE="64"/CACHESIZE="512"/' "$MEMCACHED_CONFIG"
+fi
+
 systemctl restart memcached
+systemctl enable memcached
 
 echo -e "${GREEN}✓ Memcached optimized${NC}"
 
@@ -342,7 +420,7 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Installation Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
-echo -e "HyperSpeed Pro has been successfully installed."
+echo -e "HyperSpeed Pro has been successfully installed on ${GREEN}${OS_TYPE} ${OS_VERSION}${NC}."
 echo ""
 echo -e "Access the control panel at:"
 echo -e "${YELLOW}WHM > Plugins > HyperSpeed Pro${NC}"

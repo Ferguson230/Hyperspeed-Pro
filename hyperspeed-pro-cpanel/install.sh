@@ -2,6 +2,7 @@
 #
 # HyperSpeed Pro - cPanel User Plugin Installation
 # This installs the user-level interface for individual cPanel accounts
+# Compatible with Ubuntu 22.04/24.04 and AlmaLinux 9
 #
 
 set -e
@@ -10,6 +11,10 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
+
+# OS Detection variables
+OS_TYPE=""
+OS_VERSION=""
 
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}HyperSpeed Pro - cPanel User Plugin${NC}"
@@ -21,6 +26,23 @@ echo ""
 if [ "$EUID" -ne 0 ]; then 
     echo -e "${RED}Error: This script must be run as root${NC}"
     exit 1
+fi
+
+# Detect OS type and version
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS_TYPE="$ID"
+    OS_VERSION="$VERSION_ID"
+    
+    if [[ "$ID" == "ubuntu" && "$VERSION_ID" =~ ^(22|24)\. ]]; then
+        echo -e "${GREEN}✓ Ubuntu $VERSION_ID detected${NC}"
+    elif [[ "$ID" == "almalinux" && "$VERSION_ID" =~ ^9\. ]]; then
+        echo -e "${GREEN}✓ AlmaLinux $VERSION_ID detected${NC}"
+    elif [[ "$ID" == "rocky" && "$VERSION_ID" =~ ^9\. ]]; then
+        echo -e "${GREEN}✓ Rocky Linux $VERSION_ID detected${NC}"
+    else
+        echo -e "${YELLOW}Warning: Detected $ID $VERSION_ID (proceeding with installation)${NC}"
+    fi
 fi
 
 # Check if WHM plugin is installed
@@ -146,8 +168,11 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Installation Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
+echo -e "cPanel User Plugin installed successfully on ${GREEN}${OS_TYPE} ${OS_VERSION}${NC}."
+echo ""
 echo -e "cPanel users can now access HyperSpeed Pro from:"
 echo -e "${YELLOW}cPanel → Software → HyperSpeed Pro${NC}"
+echo ""
 echo ""
 echo -e "Features available to users:"
 echo -e "  ✓ Per-domain cache management"

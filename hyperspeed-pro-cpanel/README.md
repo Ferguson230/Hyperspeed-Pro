@@ -2,6 +2,8 @@
 
 ![HyperSpeed Pro](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![cPanel](https://img.shields.io/badge/cPanel-Compatible-orange.svg)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%20%7C%2024.04-purple.svg)
+![AlmaLinux](https://img.shields.io/badge/AlmaLinux-9-0F9CDA.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 
 **Next-generation performance optimization for individual cPanel users**
@@ -43,7 +45,10 @@ HyperSpeed Pro cPanel User Plugin provides individual cPanel account holders wit
 
 1. **WHM HyperSpeed Pro Plugin** must be installed first
 2. cPanel & WHM Version 11.110 or higher
-3. Ubuntu 22.04 or 24.04 LTS
+3. **Operating System**:
+   - Ubuntu 22.04 or 24.04 LTS
+   - AlmaLinux 9
+   - Rocky Linux 9 (compatible)
 4. Active cPanel account with domain(s)
 
 ## Installation

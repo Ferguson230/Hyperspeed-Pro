@@ -10,6 +10,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![cPanel](https://img.shields.io/badge/cPanel-Compatible-orange.svg)](https://cpanel.net)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%20%7C%2024.04-purple.svg)](https://ubuntu.com)
+[![AlmaLinux](https://img.shields.io/badge/AlmaLinux-9-0F9CDA.svg)](https://almalinux.org)
 
 *The world's most advanced server performance optimization plugin for cPanel & WHM*
 
@@ -76,7 +77,10 @@ HyperSpeed Pro is a revolutionary WHM plugin that delivers unprecedented server 
 
 ### System Requirements
 
-- **Operating System**: Ubuntu 22.04 LTS or Ubuntu 24.04 LTS
+- **Operating System**: 
+  - Ubuntu 22.04 LTS or Ubuntu 24.04 LTS
+  - AlmaLinux 9
+  - Rocky Linux 9 (compatible)
 - **cPanel & WHM**: Version 11.110 or higher (latest stable recommended)
 - **RAM**: Minimum 4 GB (8 GB+ recommended)
 - **CPU**: 2+ cores recommended

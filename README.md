@@ -1,9 +1,10 @@
 # 🚀 HyperSpeed Pro - Complete Performance Optimization Suite
 
-[![GitHub Release](https://img.shields.io/github/v/release/Ferguson230/Hyperspeed-Pro?color=blue&label=Release)](https://github.com/Ferguson230/Hyperspeed-Pro/releases)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/Ferguson230/Hyperspeed-Pro/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![cPanel Compatible](https://img.shields.io/badge/cPanel-11.110%2B-orange.svg)](https://cpanel.net)
 [![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04%20|%2024.04-E95420?logo=ubuntu)](https://ubuntu.com)
+[![AlmaLinux](https://img.shields.io/badge/AlmaLinux-9-0F9CDA?logo=almalinux)](https://almalinux.org)
 [![GitHub Stars](https://img.shields.io/github/stars/Ferguson230/Hyperspeed-Pro?style=social)](https://github.com/Ferguson230/Hyperspeed-Pro)
 
 **The ultimate server performance booster for cPanel/WHM - faster than LiteSpeed, better than Varnish**
