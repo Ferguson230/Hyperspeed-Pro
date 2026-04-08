@@ -184,7 +184,6 @@ if ! command -v wget &> /dev/null; then
 fi
 
 # Download main branch archive (avoids needing a release tag)
-GITHUB_ARCHIVE="https://github.com/${GITHUB_REPO}/archive/refs/heads/main.tar.gz"
 echo "  Downloading from GitHub..."
 wget -q "$GITHUB_ARCHIVE" -O hyperspeed-pro.tar.gz || \
     curl -sSL "$GITHUB_ARCHIVE" -o hyperspeed-pro.tar.gz
