@@ -19,8 +19,8 @@ set -e
 # Configuration
 GITHUB_REPO="Ferguson230/Hyperspeed-Pro"
 GITHUB_RAW="https://raw.githubusercontent.com/${GITHUB_REPO}/main"
-GITHUB_RELEASE="https://github.com/${GITHUB_REPO}/archive/refs/tags"
-VERSION="v1.0.0"
+GITHUB_ARCHIVE="https://github.com/${GITHUB_REPO}/archive/refs/heads/main.tar.gz"
+HS_VERSION="v1.0.0"
 INSTALL_DIR="/root/hyperspeed-install"
 
 # Colors
@@ -46,7 +46,7 @@ echo -e "${PURPLE}║                                                           
 echo -e "${PURPLE}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BLUE}GitHub:${NC} https://github.com/${GITHUB_REPO}"
-echo -e "${BLUE}Version:${NC} ${VERSION}"
+echo -e "${BLUE}Version:${NC} ${HS_VERSION}"
 echo ""
 
 ###############################################################################
@@ -177,31 +177,28 @@ echo ""
 ###############################################################################
 echo -e "${BLUE}[3/9] Downloading HyperSpeed Pro from GitHub...${NC}"
 
-# Check if wget or curl is available
-if command -v wget &> /dev/null; then
-    DOWNLOAD_CMD="wget -q --show-progress"
-elif command -v curl &> /dev/null; then
-    DOWNLOAD_CMD="curl -L -o"
-else
-    echo -e "${RED}✗ Neither wget nor curl found${NC}"
-    apt-get update -qq && apt-get install -y wget
-    DOWNLOAD_CMD="wget -q --show-progress"
+# Ensure wget is available
+if ! command -v wget &> /dev/null; then
+    echo "  Installing wget..."
+    dnf install -y wget &>/dev/null || yum install -y wget &>/dev/null || apt-get install -y wget &>/dev/null
 fi
 
-# Download latest release
-echo "  Downloading version ${VERSION}..."
-wget -q --show-progress "${GITHUB_RELEASE}/${VERSION}.tar.gz" -O hyperspeed-pro.tar.gz
+# Download main branch archive (avoids needing a release tag)
+GITHUB_ARCHIVE="https://github.com/${GITHUB_REPO}/archive/refs/heads/main.tar.gz"
+echo "  Downloading from GitHub..."
+wget -q "$GITHUB_ARCHIVE" -O hyperspeed-pro.tar.gz || \
+    curl -sSL "$GITHUB_ARCHIVE" -o hyperspeed-pro.tar.gz
 
-if [ ! -f "hyperspeed-pro.tar.gz" ]; then
-    echo -e "${RED}✗ Download failed${NC}"
+if [ ! -f "hyperspeed-pro.tar.gz" ] || [ ! -s "hyperspeed-pro.tar.gz" ]; then
+    echo -e "${RED}✗ Download failed. Check your internet connection.${NC}"
     exit 1
 fi
 
 # Extract archive
 echo "  Extracting files..."
 tar -xzf hyperspeed-pro.tar.gz
-# GitHub archives extract as RepoName-TagVersion/ (case sensitive)
-EXTRACTED_DIR=$(tar -tzf hyperspeed-pro.tar.gz | head -1 | cut -d/ -f1)
+# GitHub main branch archives extract as RepoName-main/
+EXTRACTED_DIR=$(tar -tzf hyperspeed-pro.tar.gz 2>/dev/null | head -1 | cut -d/ -f1)
 if [ -z "$EXTRACTED_DIR" ] || [ ! -d "$EXTRACTED_DIR" ]; then
     echo -e "${RED}✗ Extraction failed - could not find extracted directory${NC}"
     exit 1
@@ -213,7 +210,7 @@ if [ ! -d "hyperspeed-pro" ]; then
     exit 1
 fi
 
-echo -e "${GREEN}✓${NC} Downloaded and extracted HyperSpeed Pro ${VERSION}"
+echo -e "${GREEN}✓${NC} Downloaded and extracted HyperSpeed Pro ${HS_VERSION}"
 echo ""
 
 ###############################################################################
