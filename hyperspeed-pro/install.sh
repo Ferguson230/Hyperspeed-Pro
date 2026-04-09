@@ -251,7 +251,6 @@ if [ -f "./appconfig.conf" ]; then
     APPCONFIG_BIN="/usr/local/cpanel/bin/register_appconfig"
     UNREGISTER_BIN="/usr/local/cpanel/bin/unregister_appconfig"
     APPCONFIG_CONF="$(pwd)/appconfig.conf"
-    PLUGIN_REGISTERED=false
 
     if [ -x "$APPCONFIG_BIN" ]; then
         # Clean any previously failed registration first
@@ -259,29 +258,14 @@ if [ -f "./appconfig.conf" ]; then
         sleep 1
         if "$APPCONFIG_BIN" "$APPCONFIG_CONF" >> "$INSTALL_LOG" 2>&1; then
             echo -e "${GREEN}\u2713 AppConfig registration complete${NC}"
-            PLUGIN_REGISTERED=true
         else
-            echo -e "${YELLOW}\u26a0 register_appconfig failed, trying direct placement...${NC}"
+            APPCONFIG_ERR=$(tail -5 "$INSTALL_LOG" 2>/dev/null)
+            echo -e "${YELLOW}\u26a0 register_appconfig failed (details in ${INSTALL_LOG})${NC}"
+            echo -e "${YELLOW}  → Plugin will still appear via #WHMADDON comment in index.cgi${NC}"
+            echo -e "${YELLOW}  → After install, run: /usr/local/cpanel/scripts/restartsrv_cpsrvd${NC}"
         fi
-    fi
-
-    if [ "$PLUGIN_REGISTERED" != "true" ]; then
-        # Fallback: write the STORED YAML format cPanel uses in /var/cpanel/apps/
-        # (not the input format - cPanel stores a different YAML in its apps dir)
-        for APPS_DIR in /var/cpanel/apps /usr/local/cpanel/etc/apps; do
-            mkdir -p "$APPS_DIR" 2>/dev/null || true
-            cat > "$APPS_DIR/hyperspeed_pro.conf" << 'APPCONF'
----
-name: hyperspeed_pro
-label: HyperSpeed Pro
-description: Advanced server performance optimization and acceleration system
-url: /cgi/hyperspeed_pro/index.cgi
-icon: /addon_plugins/hyperspeed-icon.png
-group: whm
-acl: all
-APPCONF
-        done
-        echo -e "${GREEN}\u2713 AppConfig file placed directly${NC}"
+    else
+        echo -e "${YELLOW}\u26a0 register_appconfig not found - plugin appears via #WHMADDON only${NC}"
     fi
 else
     echo -e "${YELLOW}\u26a0 appconfig.conf not found, skipping registration${NC}"

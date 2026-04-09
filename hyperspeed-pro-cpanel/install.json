@@ -1,0 +1,14 @@
+[
+  {
+    "type": "link",
+    "name": "HyperSpeed Pro",
+    "id": "hyperspeed_pro",
+    "icon": "hyperspeed-icon.png",
+    "uri": "hyperspeed/index.live.php",
+    "group_id": "software",
+    "order": 100,
+    "featuremanager": 1,
+    "feature": "hyperspeed_pro",
+    "description": "Advanced server performance optimization and caching acceleration"
+  }
+]

@@ -102,43 +102,69 @@ fi
 
 echo -e "${GREEN}✓ Plugin files installed${NC}"
 
+# Copy index.live.php to both themes (the .live.php suffix is required by cPanel)
+if [ -f "./cpanel-interface/index.live.php" ]; then
+    cp ./cpanel-interface/index.live.php "${PLUGIN_DIR_JP}/"
+    cp ./cpanel-interface/index.live.php "${PLUGIN_DIR_PL}/"
+fi
+
+# Generate a simple PNG icon for the cPanel menu
+echo -e "${YELLOW}Creating cPanel plugin icon...${NC}"
+if command -v python3 &>/dev/null; then
+    python3 << PYEOF
+import struct, zlib
+w, h, r, g, b = 48, 48, 102, 126, 234
+def chunk(tag, data):
+    crc = zlib.crc32(tag + data) & 0xffffffff
+    return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', crc)
+raw = b''.join(b'\x00' + bytes([r, g, b] * w) for _ in range(h))
+png = (b'\x89PNG\r\n\x1a\n' +
+       chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) +
+       chunk(b'IDAT', zlib.compress(raw, 9)) +
+       chunk(b'IEND', b''))
+for d in ['${PLUGIN_DIR_JP}', '${PLUGIN_DIR_PL}']:
+    try: open(d + '/hyperspeed-icon.png', 'wb').write(png)
+    except: pass
+PYEOF
+fi
+
 # Register with cPanel
 echo -e "${YELLOW}Registering with cPanel...${NC}"
 
-# Install dynamicui configuration (YAML format required by cPanel 11.x)
-# The 'feature' field makes the plugin appear in WHM Feature Manager
-# Entries are needed for both Paper Lantern and Jupiter themes
-DYNAMICUI_DIR="${CPANEL_BASE}/etc/cpanel/dynamicui"
-mkdir -p "${DYNAMICUI_DIR}"
-cat > "${DYNAMICUI_DIR}/hyperspeed.conf" << 'EOF'
-dynamicui:
-  - id: hyperspeed_pro_app
-    displayname: HyperSpeed Pro
-    description: Advanced Performance Optimization & Caching
-    url: /frontend/jupiter/hyperspeed/index.html
-    icon: /frontend/jupiter/hyperspeed/assets/hyperspeed-icon.png
-    group: software
-    order: 100
-    feature: hyperspeed_pro
-    type: link
-    acl: nothing
-    themes:
-      paper_lantern:
-        url: /frontend/paper_lantern/hyperspeed/index.html
-        icon: /frontend/paper_lantern/hyperspeed/assets/hyperspeed-icon.png
-EOF
-# Also register feature in WHM Feature Manager
-FEATURE_DIR="${CPANEL_BASE}/etc/cpanel/features"
-mkdir -p "${FEATURE_DIR}"
-cat > "${FEATURE_DIR}/hyperspeed_pro.conf" << 'EOF'
----
-id: hyperspeed_pro
-label: HyperSpeed Pro
-description: Advanced performance optimization and caching
-enabled: 1
-EOF
+# Use /usr/local/cpanel/scripts/install_plugin with our install.json
+# This creates the dynamicui entries and Feature Manager registration
+INSTALL_PLUGIN="/usr/local/cpanel/scripts/install_plugin"
+REGISTERED_CPANEL=false
+if [ -x "$INSTALL_PLUGIN" ] && [ -f "./install.json" ]; then
+    if "$INSTALL_PLUGIN" "$(pwd)" >> /var/log/hyperspeed_pro/install.log 2>&1; then
+        echo -e "${GREEN}\u2713 Registered with cPanel via install_plugin${NC}"
+        REGISTERED_CPANEL=true
+    else
+        echo -e "${YELLOW}\u26a0 install_plugin returned non-zero (see /var/log/hyperspeed_pro/install.log)${NC}"
+    fi
+fi
 
-echo -e "${GREEN}✓ Registered with cPanel${NC}"
+if [ "$REGISTERED_CPANEL" != "true" ]; then
+    # Fallback: write dynamicui conf directly to Jupiter theme dynamicui directory
+    # Format: key=value feature entries (NOT /usr/local/cpanel/etc/cpanel/dynamicui/)
+    echo -e "${YELLOW}\u26a0 Writing dynamicui entry directly as fallback...${NC}"
+    for THEME in jupiter paper_lantern; do
+        DUI_DIR="${CPANEL_BASE}/base/frontend/${THEME}/dynamicui"
+        if [ -d "$(dirname $DUI_DIR)" ]; then
+            mkdir -p "$DUI_DIR"
+            cat > "${DUI_DIR}/dynamicui_hyperspeed.conf" << 'DUICONF'
+file=hyperspeed-icon.png
+group=software
+itemdesc=HyperSpeed Pro
+itemorder=100
+url=hyperspeed/index.live.php
+feature=hyperspeed_pro
+featuremanager=1
+DUICONF
+        fi
+    done
+    echo -e "${GREEN}\u2713 Registered with cPanel (dynamicui fallback)${NC}"
+fi
 
 # Create user data directory structure
 echo -e "${YELLOW}Creating user data structure...${NC}"
@@ -153,6 +179,7 @@ echo -e "${YELLOW}Rebuilding cPanel themes...${NC}"
 
 /usr/local/cpanel/bin/rebuild_sprites > /dev/null 2>&1 || true
 /usr/local/cpanel/scripts/rebuildhttpdconf > /dev/null 2>&1 || true
+/usr/local/cpanel/scripts/restartsrv_cpsrvd > /dev/null 2>&1 || true
 
 echo -e "${GREEN}✓ Themes rebuilt${NC}"
 

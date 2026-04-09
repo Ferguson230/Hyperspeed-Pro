@@ -1,9 +1,13 @@
-#!/usr/bin/perl
+#!/usr/local/cpanel/3rdparty/bin/perl
+#WHMADDON:hyperspeed_pro:HyperSpeed Pro:hyperspeed-icon.png
+#ACLS:all
 #
 # HyperSpeed Pro - Main CGI Interface
 # WHM Plugin Entry Point
 #
-# This is the main interface that appears in WHM
+# WHMADDON comment above automatically registers this plugin in WHM navigation.
+# The #WHMADDON format is: #WHMADDON:plugin_name:Display Name:icon.png
+# The #ACLS line sets the ACL requirement (all = all authenticated WHM users)
 
 use strict;
 use warnings;
@@ -71,8 +75,8 @@ sub show_dashboard {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HyperSpeed Pro Dashboard</title>
-    <link rel="stylesheet" href="/whostmgr/docroot/cgi/hyperspeed_pro/assets/style.css">
-    <script src="/whostmgr/docroot/cgi/hyperspeed_pro/assets/dashboard.js"></script>
+    <link rel="stylesheet" href="assets/style.css">
+    <script src="assets/dashboard.js"></script>
 </head>
 <body class="hyperspeed-dashboard">
     <div class="container">

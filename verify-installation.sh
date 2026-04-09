@@ -104,6 +104,24 @@ for file in "${files[@]}"; do
     fi
 done
 
+# Check AppConfig registration (the official way)
+IS_REG="/usr/local/cpanel/bin/is_registered_with_appconfig"
+if [ -x "$IS_REG" ]; then
+    if [ "$($IS_REG whostmgr hyperspeed_pro 2>/dev/null)" = "1" ]; then
+        check_status 0 "WHM plugin registered with AppConfig"
+    else
+        check_status 1 "WHM plugin NOT registered with AppConfig (menu link will not appear)"
+    fi
+else
+    # Fall back: check WHMADDON comment in CGI (alternative registration mechanism)
+    CGI_FILE="/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed_pro/index.cgi"
+    if grep -q '#WHMADDON' "$CGI_FILE" 2>/dev/null; then
+        check_status 0 "WHM plugin has #WHMADDON self-registration comment"
+    else
+        check_status 1 "WHM plugin may not appear in navigation menu"
+    fi
+fi
+
 echo ""
 
 ##############################################################################
