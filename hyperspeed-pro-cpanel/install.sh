@@ -69,6 +69,7 @@ mkdir -p "${PLUGIN_DIR_PL}/assets"
 mkdir -p "${PLUGIN_DIR_JP}"
 mkdir -p "${PLUGIN_DIR_JP}/assets"
 mkdir -p "${API_DIR}"
+mkdir -p /var/log/hyperspeed_pro
 
 echo -e "${YELLOW}Copying plugin files...${NC}"
 
@@ -101,6 +102,17 @@ if [ -f "${UAPI_DIR}/HyperSpeed.pm" ]; then
 fi
 
 echo -e "${GREEN}✓ Plugin files installed${NC}"
+
+# Best-effort install of the Redis Perl module for cPanel's managed Perl.
+# The UAPI works without it via redis-cli fallbacks, but bypass-rule writes
+# and user settings are better when the module is available.
+echo -e "${YELLOW}Checking cPanel Perl Redis module...${NC}"
+if [ -x "${SCRIPTS_DIR}/perlinstaller" ]; then
+    "${SCRIPTS_DIR}/perlinstaller" Redis >> /var/log/hyperspeed_pro/install.log 2>&1 || true
+elif [ -x "${SCRIPTS_DIR}/checkperlmodules" ]; then
+    "${SCRIPTS_DIR}/checkperlmodules" --install Redis >> /var/log/hyperspeed_pro/install.log 2>&1 || true
+fi
+echo -e "${GREEN}✓ Perl module check complete${NC}"
 
 # Copy index.live.php to both themes (the .live.php suffix is required by cPanel)
 if [ -f "./cpanel-interface/index.live.php" ]; then

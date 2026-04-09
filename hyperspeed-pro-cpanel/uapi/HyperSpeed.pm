@@ -24,7 +24,7 @@ our $VERSION = '1.0.0';
 
 my $logger       = Cpanel::Logger->new();
 my $redis;
-my $REDIS_LOADED = 0;
+my $REDIS_LOADED = 0;    # 0=unknown, 1=loaded, -1=unavailable
 
 # ── Redis helpers ─────────────────────────────────────────────────────────────
 
@@ -33,13 +33,15 @@ sub _init_redis {
     return $redis if $redis && eval { $redis->ping; 1 };
     $redis = undef;
 
-    unless ($REDIS_LOADED) {
+    if ($REDIS_LOADED == 0) {
         eval { require Redis; $REDIS_LOADED = 1 };
         if ($@) {
-            $logger->warn("Redis Perl module not available: $@");
+            $REDIS_LOADED = -1;
             return undef;
         }
     }
+
+    return undef if $REDIS_LOADED < 0;
 
     eval {
         $redis = Redis->new(
@@ -49,7 +51,6 @@ sub _init_redis {
     };
 
     if ($@) {
-        $logger->warn("Failed to connect to Redis: $@");
         $redis = undef;
     }
 
