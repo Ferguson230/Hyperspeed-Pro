@@ -9,7 +9,6 @@
 ###############################################################################
 
 GITHUB_REPO="Ferguson230/Hyperspeed-Pro"
-GITHUB_ARCHIVE="https://github.com/${GITHUB_REPO}/archive/refs/heads/main.tar.gz"
 INSTALL_DIR="/root/hyperspeed-install"
 LOG="/var/log/hyperspeed-install.log"
 
@@ -67,26 +66,45 @@ ok "Ready"
 echo ""
 
 ###############################################################################
-info "Downloading from GitHub..."
-echo "Archive: $GITHUB_ARCHIVE" >> "$LOG"
+info "Downloading files from GitHub..."
+RAW="https://raw.githubusercontent.com/${GITHUB_REPO}/main"
 
-if command -v curl &>/dev/null; then
-    curl -fL --progress-bar "$GITHUB_ARCHIVE" -o repo.tar.gz \
-      || die "curl download failed"
-else
-    wget -q -O repo.tar.gz "$GITHUB_ARCHIVE" \
-      || die "wget download failed"
-fi
+# Download one file: fetch $1 (repo-relative path) into $INSTALL_DIR/$1
+dl() {
+    local path="$1"
+    local dest="$INSTALL_DIR/$path"
+    mkdir -p "$(dirname "$dest")"
+    wget -q --timeout=30 -O "$dest" "${RAW}/${path}" >> "$LOG" 2>&1 \
+        || die "Failed to download: $path"
+}
 
-[ -s repo.tar.gz ] || die "Downloaded file is empty — check firewall/internet"
-info "Extracting..."
-tar -xzf repo.tar.gz >> "$LOG" 2>&1 || die "tar extraction failed"
+# WHM plugin files
+dl hyperspeed-pro/install.sh
+dl hyperspeed-pro/uninstall.sh
+dl hyperspeed-pro/appconfig.conf
+dl hyperspeed-pro/plugin.conf
+dl hyperspeed-pro/assets/dashboard.js
+dl hyperspeed-pro/assets/style.css
+dl hyperspeed-pro/assets/hyperspeed-icon.txt
+dl hyperspeed-pro/bin/hyperspeed
+dl hyperspeed-pro/bin/benchmark.sh
+dl hyperspeed-pro/cgi/index.cgi
+dl hyperspeed-pro/config/nginx-hyperspeed.conf
+dl hyperspeed-pro/lib/PerformanceEngine.php
+dl hyperspeed-pro/lib/SecurityEngine.php
+dl hyperspeed-pro/systemd/hyperspeed-engine.service
 
-EXTRACTED=$(find "$INSTALL_DIR" -maxdepth 1 -mindepth 1 -type d ! -name '*.bak.*' | head -1)
-[ -d "$EXTRACTED" ] || die "No directory found after extraction (see $LOG)"
-echo "Extracted dir: $EXTRACTED" >> "$LOG"
-mv "$EXTRACTED" "$INSTALL_DIR/repo" 2>/dev/null || true
-ok "Downloaded and extracted"
+# cPanel plugin files
+dl hyperspeed-pro-cpanel/install.sh
+dl hyperspeed-pro-cpanel/uninstall.sh
+dl hyperspeed-pro-cpanel/cpanel-interface/index.html
+dl hyperspeed-pro-cpanel/cpanel-interface/assets/dashboard.js
+dl hyperspeed-pro-cpanel/cpanel-interface/assets/style.css
+dl hyperspeed-pro-cpanel/lib/sync-users.php
+dl hyperspeed-pro-cpanel/systemd/hyperspeed-cpanel-sync.service
+dl hyperspeed-pro-cpanel/uapi/HyperSpeed.pm
+
+ok "All files downloaded"
 echo ""
 
 ###############################################################################
@@ -113,8 +131,8 @@ run_installer() {
     echo ""
 }
 
-run_installer "WHM Plugin"    "$INSTALL_DIR/repo/hyperspeed-pro"
-run_installer "cPanel Plugin" "$INSTALL_DIR/repo/hyperspeed-pro-cpanel"
+run_installer "WHM Plugin"    "$INSTALL_DIR/hyperspeed-pro"
+run_installer "cPanel Plugin" "$INSTALL_DIR/hyperspeed-pro-cpanel"
 
 ###############################################################################
 info "Enabling services..."
