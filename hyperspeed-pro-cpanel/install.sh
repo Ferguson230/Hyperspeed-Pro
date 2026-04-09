@@ -131,22 +131,32 @@ fi
 # Register with cPanel
 echo -e "${YELLOW}Registering with cPanel...${NC}"
 
-# Use /usr/local/cpanel/scripts/install_plugin with our install.json
-# This creates the dynamicui entries and Feature Manager registration
+# install_plugin expects the source directory to contain install.json AND the plugin
+# files in a subdirectory whose name matches the uri prefix in install.json.
+# Our install.json says uri=hyperspeed/index.live.php, so we need hyperspeed/ inside
+# the source directory.  Build a clean temp dir with the right layout.
 INSTALL_PLUGIN="/usr/local/cpanel/scripts/install_plugin"
 REGISTERED_CPANEL=false
 if [ -x "$INSTALL_PLUGIN" ] && [ -f "./install.json" ]; then
-    if "$INSTALL_PLUGIN" "$(pwd)" >> /var/log/hyperspeed_pro/install.log 2>&1; then
+    TEMP_PLUGIN_SRC=$(mktemp -d)
+    mkdir -p "${TEMP_PLUGIN_SRC}/hyperspeed"
+    if [ -d "./cpanel-interface" ]; then
+        cp -r ./cpanel-interface/* "${TEMP_PLUGIN_SRC}/hyperspeed/"
+    fi
+    cp ./install.json "${TEMP_PLUGIN_SRC}/"
+    if "$INSTALL_PLUGIN" "${TEMP_PLUGIN_SRC}" >> /var/log/hyperspeed_pro/install.log 2>&1; then
         echo -e "${GREEN}\u2713 Registered with cPanel via install_plugin${NC}"
         REGISTERED_CPANEL=true
     else
         echo -e "${YELLOW}\u26a0 install_plugin returned non-zero (see /var/log/hyperspeed_pro/install.log)${NC}"
     fi
+    rm -rf "${TEMP_PLUGIN_SRC}"
 fi
 
 if [ "$REGISTERED_CPANEL" != "true" ]; then
-    # Fallback: write dynamicui conf directly to Jupiter theme dynamicui directory
-    # Format: key=value feature entries (NOT /usr/local/cpanel/etc/cpanel/dynamicui/)
+    # Fallback: write dynamicui conf directly.
+    # Omit feature=/featuremanager= so the link appears for ALL cPanel users
+    # without needing a Feature Manager entry (server-wide optimization tool).
     echo -e "${YELLOW}\u26a0 Writing dynamicui entry directly as fallback...${NC}"
     for THEME in jupiter paper_lantern; do
         DUI_DIR="${CPANEL_BASE}/base/frontend/${THEME}/dynamicui"
@@ -158,8 +168,6 @@ group=software
 itemdesc=HyperSpeed Pro
 itemorder=100
 url=hyperspeed/index.live.php
-feature=hyperspeed_pro
-featuremanager=1
 DUICONF
         fi
     done

@@ -250,39 +250,76 @@ sub manage_cache {
     print $cgi->redirect('?action=dashboard');
 }
 
+# Read a single string field from 'redis-cli INFO section'
+sub _redis_info_field {
+    my ($section, $field) = @_;
+    my $out = Cpanel::SafeRun::Simple::saferun('/usr/bin/redis-cli', 'INFO', $section) // '';
+    if (my ($val) = $out =~ /^${field}:(\d+)/m) {
+        return $val + 0;
+    }
+    return 0;
+}
+
+# Sum all hourly metric key values for a given metric name
+# MetricsCollector stores: metrics:<name>:YYYY-MM-DD-HH
+sub _sum_redis_metric {
+    my ($metric) = @_;
+    my $keys_out = Cpanel::SafeRun::Simple::saferun(
+        '/usr/bin/redis-cli', '--scan', '--pattern', "metrics:${metric}:*"
+    ) // '';
+    my $total = 0;
+    for my $key (split /\n/, $keys_out) {
+        $key =~ s/\s+//g;
+        next unless $key;
+        my $val = Cpanel::SafeRun::Simple::saferun('/usr/bin/redis-cli', 'GET', $key) // '0';
+        $val =~ s/\s+//g;
+        $total += ($val =~ /^\d+$/ ? $val : 0);
+    }
+    return $total;
+}
+
 sub get_metrics {
-    # Get metrics from Redis
-    my $metrics = {
-        cache_hit_redis => 15234,
-        cache_hit_memcached => 8921,
-        cache_miss => 1543,
-        cache_set => 9120,
+    # Primary source: Redis's own counters (accurate for all cache activity)
+    my $hits   = _redis_info_field('stats', 'keyspace_hits');
+    my $misses = _redis_info_field('stats', 'keyspace_misses');
+
+    # Break out per-tier hits from engine-written metrics; fall back to redis total
+    my $redis_hits = _sum_redis_metric('cache_hit_redis');
+    my $mc_hits    = _sum_redis_metric('cache_hit_memcached');
+    # If engine hasn't written per-tier keys yet, put everything on redis side
+    if ($redis_hits == 0 && $mc_hits == 0 && $hits > 0) {
+        $redis_hits = $hits;
+    }
+
+    return {
+        cache_hit_redis     => $redis_hits,
+        cache_hit_memcached => $mc_hits,
+        cache_miss          => ($misses || _sum_redis_metric('cache_miss')),
+        cache_set           => _sum_redis_metric('cache_set'),
     };
-    
-    return $metrics;
 }
 
 sub get_security_stats {
-    my $stats = {
-        blocked_requests => 1892,
-        blacklisted_ips => 47,
-        ddos_attacks => 3,
+    return {
+        blocked_requests => _sum_redis_metric('blocked_requests'),
+        blacklisted_ips  => _sum_redis_metric('blacklisted_ips'),
+        ddos_attacks     => _sum_redis_metric('ddos_attacks'),
     };
-    
-    return $stats;
 }
 
 sub handle_api {
     my ($cgi, $config) = @_;
-    
-    print "Content-type: application/json\r\n\r\n";
-    
+    # NOTE: Content-Type header already sent by top-level dispatch for action=api.
+    # Do NOT print another header here.
     my $api_action = $cgi->param('api_action') || '';
-    
+
     if ($api_action eq 'metrics') {
         print encode_json(get_metrics());
     } elsif ($api_action eq 'security') {
         print encode_json(get_security_stats());
+    } elsif ($api_action eq 'cache_flush') {
+        Cpanel::SafeRun::Simple::saferun('/usr/bin/redis-cli', 'FLUSHALL');
+        print encode_json({success => 1, message => 'Cache cleared'});
     } else {
         print encode_json({error => 'Unknown API action'});
     }

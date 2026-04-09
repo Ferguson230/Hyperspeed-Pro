@@ -29,20 +29,14 @@ function initializeDashboard() {
 function clearCache() {
     if (confirm('Are you sure you want to clear all caches? This may temporarily slow down your sites.')) {
         showNotification('Clearing caches...', 'info');
-        
-        fetch('?action=cache&cache_action=flush', {
-            method: 'POST'
-        })
-        .then(response => response.json())
-        .then(data => {
-            showNotification('All caches cleared successfully!', 'success');
-            setTimeout(() => {
-                location.reload();
-            }, 1500);
-        })
-        .catch(error => {
-            showNotification('Error clearing caches', 'error');
-        });
+
+        fetch('?action=api&api_action=cache_flush', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                showNotification('All caches cleared successfully!', 'success');
+                setTimeout(() => location.reload(), 1500);
+            })
+            .catch(() => showNotification('Error clearing caches', 'error'));
     }
 }
 
@@ -67,20 +61,18 @@ function refreshStats() {
  * Update metrics on dashboard
  */
 function updateMetrics(data) {
-    // Update cache hit rate
-    const totalRequests = (data.cache_hit_redis || 0) + 
-                         (data.cache_hit_memcached || 0) + 
+    const totalRequests = (data.cache_hit_redis || 0) +
+                         (data.cache_hit_memcached || 0) +
                          (data.cache_miss || 0);
-    
+    const cacheHits = (data.cache_hit_redis || 0) + (data.cache_hit_memcached || 0);
+
+    // Update cache hit rate card
     if (totalRequests > 0) {
-        const cacheHits = (data.cache_hit_redis || 0) + (data.cache_hit_memcached || 0);
         const hitRate = ((cacheHits / totalRequests) * 100).toFixed(1);
-        
-        // Update DOM elements if they exist
-        const hitRateElement = document.querySelector('.cache-hit-rate .metric-value');
-        if (hitRateElement) {
-            hitRateElement.textContent = hitRate + '%';
-        }
+        const rateEl = document.querySelector('.cache-icon')?.closest('.metric-card')?.querySelector('.metric-value');
+        if (rateEl) rateEl.textContent = hitRate + '%';
+        const labelEl = document.querySelector('.cache-icon')?.closest('.metric-card')?.querySelector('.metric-label');
+        if (labelEl) labelEl.textContent = cacheHits.toLocaleString() + ' of ' + totalRequests.toLocaleString() + ' requests';
     }
 }
 
