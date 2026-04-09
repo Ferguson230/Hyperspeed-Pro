@@ -1,14 +1,17 @@
 #!/bin/bash
 # HyperSpeed Pro Quick Installer
 # Usage: wget --no-cache -O /tmp/hs.sh https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main/quick-install.sh && bash /tmp/hs.sh
+# Optional: HYPERSPEED_REF=<commit-or-branch> bash /tmp/hs.sh
 
-RAW="https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main"
+REF="${HYPERSPEED_REF:-main}"
+RAW="https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/${REF}"
 DIR="/root/hyperspeed-install"
 LOG="/var/log/hyperspeed-install.log"
 
 echo "================================================"
 echo "  HyperSpeed Pro Quick Install"
 echo "  Started: $(date)"
+echo "  Ref: $REF"
 echo "================================================"
 echo ""
 
