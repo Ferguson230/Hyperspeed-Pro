@@ -1,260 +1,141 @@
 #!/bin/bash
 ###############################################################################
-# HyperSpeed Pro - One-Command Installation Script
+# HyperSpeed Pro - Quick Installation Script
 #
-# Usage:
 #   curl -sSL https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main/quick-install.sh | sudo bash
 #
-# Or download and inspect first:
-#   wget -O quick-install.sh https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main/quick-install.sh
-#   chmod +x quick-install.sh
-#   sudo ./quick-install.sh
+# Or:
+#   wget -O /tmp/hs-install.sh https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main/quick-install.sh && bash /tmp/hs-install.sh
 ###############################################################################
-
-# Do NOT use set -e — we handle every error explicitly so nothing fails silently.
-# Log file is open from the very first line so every error is captured.
 
 GITHUB_REPO="Ferguson230/Hyperspeed-Pro"
-GITHUB_RAW="https://raw.githubusercontent.com/${GITHUB_REPO}/main"
 GITHUB_ARCHIVE="https://github.com/${GITHUB_REPO}/archive/refs/heads/main.tar.gz"
-HS_VERSION="v1.0.0"
 INSTALL_DIR="/root/hyperspeed-install"
-LOG="/var/log/hyperspeed-quick-install.log"
+LOG="/var/log/hyperspeed-install.log"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; NC='\033[0m'
 
-# Ensure log directory exists before anything else
+ok()   { echo -e "${GREEN}[OK]${NC}  $*"; }
+info() { echo -e "${BLUE}[..]${NC}  $*"; }
+warn() { echo -e "${YELLOW}[!!]${NC}  $*"; }
+die()  { echo -e "${RED}[FAIL]${NC} $*"; echo "Full log: $LOG"; exit 1; }
+
 mkdir -p /var/log
-exec > >(tee -a "$LOG") 2>&1
-echo "=== HyperSpeed Pro Quick Install - $(date) ===" >> "$LOG"
+echo "=== HyperSpeed Pro Install $(date) ===" > "$LOG"
 
-# Trap ANY unexpected exit and print the line number
-trap 'code=$?; if [ $code -ne 0 ]; then echo -e "\n${RED}ERROR: script exited unexpectedly at line $LINENO (exit code $code)${NC}"; echo "Full log: $LOG"; fi' EXIT
-
-###############################################################################
-# Root check
-###############################################################################
-if [ "$EUID" -ne 0 ]; then
-    echo -e "${RED}Error: must be run as root (use sudo)${NC}"
-    exit 1
-fi
-
-###############################################################################
-# Banner
 ###############################################################################
 echo ""
-echo -e "${PURPLE}==========================================================${NC}"
-echo -e "${PURPLE}   HyperSpeed Pro - Quick Installation  v${HS_VERSION}${NC}"
-echo -e "${PURPLE}   Faster than LiteSpeed. Better than Varnish.${NC}"
-echo -e "${PURPLE}==========================================================${NC}"
-echo ""
-echo -e "${BLUE}GitHub :${NC} https://github.com/${GITHUB_REPO}"
-echo -e "${BLUE}Log    :${NC} $LOG"
+echo -e "${CYAN}================================================${NC}"
+echo -e "${CYAN}  HyperSpeed Pro Quick Installer${NC}"
+echo -e "${CYAN}================================================${NC}"
 echo ""
 
-###############################################################################
-# [1/7] System checks
-###############################################################################
-echo -e "${BLUE}[1/7] System checks...${NC}"
+[ "$EUID" -ne 0 ] && die "Must be run as root"
 
-if [ ! -f /etc/os-release ]; then
-    echo -e "${RED}Cannot detect OS — /etc/os-release missing${NC}"; exit 1
-fi
+###############################################################################
+info "Checking system..."
+[ -f /etc/os-release ] || die "Cannot detect OS"
 . /etc/os-release
-OS_NAME="$ID"; OS_VERSION="$VERSION_ID"
-case "$OS_NAME" in
-    ubuntu)
-        if [[ "$OS_VERSION" == "22.04" || "$OS_VERSION" == "24.04" ]]; then
-            echo -e "${GREEN}OK${NC} Ubuntu $OS_VERSION"
-            PKG_MGR="apt-get"
-        else
-            echo -e "${RED}Unsupported Ubuntu version $OS_VERSION (need 22.04 or 24.04)${NC}"; exit 1
-        fi ;;
-    almalinux|rocky)
-        if [[ "$OS_VERSION" =~ ^9\. ]]; then
-            echo -e "${GREEN}OK${NC} $OS_NAME $OS_VERSION"
-            PKG_MGR="dnf"
-        else
-            echo -e "${RED}Unsupported $OS_NAME version $OS_VERSION (need 9.x)${NC}"; exit 1
-        fi ;;
-    *)
-        echo -e "${YELLOW}Warning: untested OS ($OS_NAME $OS_VERSION) — continuing${NC}"
-        PKG_MGR="dnf" ;;
+echo "OS: $ID $VERSION_ID" >> "$LOG"
+
+case "$ID" in
+  ubuntu)
+    [[ "$VERSION_ID" == "22.04" || "$VERSION_ID" == "24.04" ]] \
+      || die "Ubuntu $VERSION_ID not supported (need 22.04 or 24.04)"
+    PKG_MGR="apt-get" ;;
+  almalinux|rocky)
+    [[ "$VERSION_ID" =~ ^9\. ]] \
+      || die "$ID $VERSION_ID not supported (need 9.x)"
+    PKG_MGR="dnf" ;;
+  *)
+    warn "Untested OS $ID $VERSION_ID — proceeding"
+    PKG_MGR="dnf" ;;
 esac
 
-if [ ! -d /usr/local/cpanel ]; then
-    echo -e "${RED}cPanel/WHM not found at /usr/local/cpanel${NC}"; exit 1
-fi
-CPANEL_VER=$(cat /usr/local/cpanel/version 2>/dev/null || echo "unknown")
-echo -e "${GREEN}OK${NC} cPanel $CPANEL_VER"
-
-FREE_KB=$(df / | awk 'NR==2{print $4}')
-echo -e "${GREEN}OK${NC} Disk free: $((FREE_KB/1024)) MB"
-
-RAM_MB=$(free -m | awk '/^Mem:/{print $2}')
-echo -e "${GREEN}OK${NC} RAM: ${RAM_MB} MB"
+[ -d /usr/local/cpanel ] || die "cPanel not found at /usr/local/cpanel"
+CPANEL_VER=$(cat /usr/local/cpanel/version 2>/dev/null || echo "?")
+ok "$ID $VERSION_ID | cPanel $CPANEL_VER"
 echo ""
 
 ###############################################################################
-# Confirm
-###############################################################################
-echo -e "${YELLOW}Installing:${NC} WHM Plugin, cPanel Plugin, Redis, Memcached, performance engine"
+info "Preparing $INSTALL_DIR ..."
+[ -d "$INSTALL_DIR" ] && mv "$INSTALL_DIR" "${INSTALL_DIR}.bak.$(date +%s)"
+mkdir -p "$INSTALL_DIR" || die "Cannot create $INSTALL_DIR"
+cd "$INSTALL_DIR"       || die "Cannot cd to $INSTALL_DIR"
+ok "Ready"
 echo ""
 
 ###############################################################################
-# [2/7] Prepare directory
-###############################################################################
-echo -e "${BLUE}[2/7] Preparing install directory...${NC}"
+info "Downloading from GitHub..."
+echo "Archive: $GITHUB_ARCHIVE" >> "$LOG"
 
-if [ -d "$INSTALL_DIR" ]; then
-    BACKUP="${INSTALL_DIR}.bak.$(date +%Y%m%d_%H%M%S)"
-    echo "  Existing dir found — moving to $BACKUP"
-    mv "$INSTALL_DIR" "$BACKUP" || { echo -e "${RED}Cannot move $INSTALL_DIR — check permissions${NC}"; exit 1; }
-fi
-
-mkdir -p "$INSTALL_DIR" || { echo -e "${RED}Cannot create $INSTALL_DIR${NC}"; exit 1; }
-cd "$INSTALL_DIR"       || { echo -e "${RED}Cannot cd to $INSTALL_DIR${NC}"; exit 1; }
-echo -e "${GREEN}OK${NC} $INSTALL_DIR"
-echo ""
-
-###############################################################################
-# [3/7] Download
-###############################################################################
-echo -e "${BLUE}[3/7] Downloading from GitHub...${NC}"
-
-if ! command -v wget &>/dev/null && ! command -v curl &>/dev/null; then
-    echo "  Installing wget..."
-    $PKG_MGR install -y wget
-fi
-
-if command -v wget &>/dev/null; then
-    wget --show-progress -O hyperspeed-pro.tar.gz "$GITHUB_ARCHIVE" \
-        || { echo -e "${RED}wget download failed${NC}"; exit 1; }
+if command -v curl &>/dev/null; then
+    curl -fL --progress-bar "$GITHUB_ARCHIVE" -o repo.tar.gz \
+      || die "curl download failed"
 else
-    curl -L --progress-bar -o hyperspeed-pro.tar.gz "$GITHUB_ARCHIVE" \
-        || { echo -e "${RED}curl download failed${NC}"; exit 1; }
+    wget -q -O repo.tar.gz "$GITHUB_ARCHIVE" \
+      || die "wget download failed"
 fi
 
-if [ ! -s hyperspeed-pro.tar.gz ]; then
-    echo -e "${RED}Downloaded file is empty — check internet / firewall${NC}"; exit 1
-fi
+[ -s repo.tar.gz ] || die "Downloaded file is empty — check firewall/internet"
+info "Extracting..."
+tar -xzf repo.tar.gz >> "$LOG" 2>&1 || die "tar extraction failed"
 
-echo "  Extracting..."
-tar -xzf hyperspeed-pro.tar.gz || { echo -e "${RED}tar extraction failed${NC}"; exit 1; }
-
-# GitHub names the directory RepoName-branch (e.g. Hyperspeed-Pro-main)
-EXTRACTED=$(find "$INSTALL_DIR" -maxdepth 1 -mindepth 1 -type d | grep -v '\.bak\.' | head -1)
-if [ -z "$EXTRACTED" ] || [ ! -d "$EXTRACTED" ]; then
-    echo -e "${RED}Could not find extracted directory in $INSTALL_DIR${NC}"
-    ls -la "$INSTALL_DIR"
-    exit 1
-fi
-echo "  Extracted: $EXTRACTED"
-[ "$EXTRACTED" != "$INSTALL_DIR/hyperspeed-pro" ] && mv "$EXTRACTED" "$INSTALL_DIR/hyperspeed-pro"
-echo -e "${GREEN}OK${NC} Source ready"
+EXTRACTED=$(find "$INSTALL_DIR" -maxdepth 1 -mindepth 1 -type d ! -name '*.bak.*' | head -1)
+[ -d "$EXTRACTED" ] || die "No directory found after extraction (see $LOG)"
+echo "Extracted dir: $EXTRACTED" >> "$LOG"
+mv "$EXTRACTED" "$INSTALL_DIR/repo" 2>/dev/null || true
+ok "Downloaded and extracted"
 echo ""
 
 ###############################################################################
-# [4/7] Install WHM Plugin
-###############################################################################
-echo -e "${BLUE}[4/7] Installing WHM Plugin...${NC}"
+run_installer() {
+    local label="$1" dir="$2"
+    info "Installing $label..."
+    [ -d "$dir" ] || die "$label directory not found: $dir"
+    cd "$dir"
+    chmod +x install.sh
 
-WHM_DIR="$INSTALL_DIR/hyperspeed-pro/hyperspeed-pro"
-if [ ! -d "$WHM_DIR" ]; then
-    echo -e "${RED}WHM plugin directory not found: $WHM_DIR${NC}"
-    echo "  Contents of $INSTALL_DIR/hyperspeed-pro:"
-    ls -la "$INSTALL_DIR/hyperspeed-pro/" 2>/dev/null || echo "  (empty)"
-    exit 1
-fi
+    # Run with stdin closed (/dev/null) so no prompt can hang the script.
+    # Output goes directly to log; progress shown by spinner.
+    bash install.sh </dev/null >> "$LOG" 2>&1 &
+    local pid=$! spin=0
+    local chars=('|' '/' '-' '\\')
+    while kill -0 $pid 2>/dev/null; do
+        printf "\r  %s  Installing %s (this may take 2-3 min)..." "${chars[$((spin % 4))]}" "$label"
+        spin=$((spin+1)); sleep 1
+    done
+    printf "\r%-60s\r" " "   # clear spinner line
+    wait $pid
+    local rc=$?
+    [ $rc -eq 0 ] && ok "$label installed" || die "$label install.sh failed (exit $rc) — see $LOG"
+    echo ""
+}
 
-cd "$WHM_DIR"
-chmod +x install.sh
-echo "  Running install.sh from $(pwd)"
-echo "  (full output in $LOG)"
-echo ""
-
-if bash install.sh; then
-    echo -e "${GREEN}OK${NC} WHM Plugin installed"
-else
-    echo -e "${RED}WHM Plugin install.sh failed (exit $?)${NC}"
-    echo "  Check: $LOG  and  /var/log/hyperspeed_pro/install.log"
-    exit 1
-fi
-echo ""
-
-###############################################################################
-# [5/7] Install cPanel Plugin
-###############################################################################
-echo -e "${BLUE}[5/7] Installing cPanel Plugin...${NC}"
-
-CPANEL_DIR="$INSTALL_DIR/hyperspeed-pro/hyperspeed-pro-cpanel"
-if [ ! -d "$CPANEL_DIR" ]; then
-    echo -e "${RED}cPanel plugin directory not found: $CPANEL_DIR${NC}"
-    ls -la "$INSTALL_DIR/hyperspeed-pro/" 2>/dev/null
-    exit 1
-fi
-
-cd "$CPANEL_DIR"
-chmod +x install.sh
-echo "  Running install.sh from $(pwd)"
-echo ""
-
-if bash install.sh; then
-    echo -e "${GREEN}OK${NC} cPanel Plugin installed"
-else
-    echo -e "${RED}cPanel Plugin install.sh failed (exit $?)${NC}"
-    echo "  Check: $LOG"
-    exit 1
-fi
-echo ""
+run_installer "WHM Plugin"    "$INSTALL_DIR/repo/hyperspeed-pro"
+run_installer "cPanel Plugin" "$INSTALL_DIR/repo/hyperspeed-pro-cpanel"
 
 ###############################################################################
-# [6/7] Enable services
-###############################################################################
-echo -e "${BLUE}[6/7] Enabling services...${NC}"
-
+info "Enabling services..."
 for svc in redis memcached hyperspeed-engine hyperspeed-cpanel-sync; do
-    if systemctl list-unit-files --no-pager 2>/dev/null | grep -q "^${svc}\.service"; then
-        systemctl enable "$svc" 2>/dev/null && echo -e "  ${GREEN}enabled${NC} $svc" || echo "  (could not enable $svc)"
-        systemctl start  "$svc" 2>/dev/null && echo -e "  ${GREEN}started${NC} $svc" || echo "  (could not start $svc)"
+    if systemctl list-unit-files 2>/dev/null | grep -q "^${svc}\.service"; then
+        systemctl enable "$svc" >> "$LOG" 2>&1 \
+          && systemctl start "$svc" >> "$LOG" 2>&1 \
+          && ok "  $svc" \
+          || warn "  $svc could not start (check $LOG)"
     fi
 done
 echo ""
 
 ###############################################################################
-# [7/7] Verify
-###############################################################################
-echo -e "${BLUE}[7/7] Verifying installation...${NC}"
-
-cd "$INSTALL_DIR"
-if [ -f "$INSTALL_DIR/hyperspeed-pro/verify-installation.sh" ]; then
-    bash "$INSTALL_DIR/hyperspeed-pro/verify-installation.sh" || true
-elif command -v wget &>/dev/null; then
-    wget -q "${GITHUB_RAW}/verify-installation.sh" -O verify-installation.sh \
-        && bash verify-installation.sh || true
-fi
+SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+echo -e "${GREEN}================================================${NC}"
+echo -e "${GREEN}  HyperSpeed Pro installed successfully!${NC}"
+echo -e "${GREEN}================================================${NC}"
 echo ""
-
-###############################################################################
-# Done
-###############################################################################
-trap - EXIT   # clear error trap — we succeeded
-
-echo -e "${GREEN}==========================================================${NC}"
-echo -e "${GREEN}   HyperSpeed Pro installed successfully!${NC}"
-echo -e "${GREEN}==========================================================${NC}"
+echo -e "  WHM   : https://${SERVER_IP}:2087  > Plugins > HyperSpeed Pro"
+echo -e "  cPanel: https://${SERVER_IP}:2083  > Software > HyperSpeed Pro"
+echo -e "  Log   : $LOG"
 echo ""
-SERVER_IP=$(hostname -I | awk '{print $1}')
-echo -e "${CYAN}WHM Plugin :${NC} https://${SERVER_IP}:2087  -> Plugins -> HyperSpeed Pro"
-echo -e "${CYAN}cPanel     :${NC} https://${SERVER_IP}:2083  -> Software -> HyperSpeed Pro"
-echo -e "${CYAN}Logs       :${NC} $LOG"
-echo -e "${CYAN}Docs       :${NC} https://github.com/${GITHUB_REPO}"
-echo ""
-echo -e "${GREEN}Done at $(date)${NC}"
 exit 0
