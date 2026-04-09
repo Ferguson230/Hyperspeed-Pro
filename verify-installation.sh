@@ -104,22 +104,23 @@ for file in "${files[@]}"; do
     fi
 done
 
-# Check AppConfig registration (the official way)
+# Check AppConfig registration.
+# register_appconfig copies the conf file to /var/cpanel/apps/ using the source
+# filename as the registered ID — we pass hyperspeed_pro.conf so the file lands
+# at /var/cpanel/apps/hyperspeed_pro.conf.  Check that first, then fall back to
+# is_registered_with_appconfig, then confirm via #WHMADDON in the CGI.
+APPCONFIG_FILE="/var/cpanel/apps/hyperspeed_pro.conf"
+CGI_FILE="/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed_pro/index.cgi"
 IS_REG="/usr/local/cpanel/bin/is_registered_with_appconfig"
-if [ -x "$IS_REG" ]; then
-    if [ "$($IS_REG whostmgr hyperspeed_pro 2>/dev/null)" = "1" ]; then
-        check_status 0 "WHM plugin registered with AppConfig"
-    else
-        check_status 1 "WHM plugin NOT registered with AppConfig (menu link will not appear)"
-    fi
+
+if [ -f "$APPCONFIG_FILE" ]; then
+    check_status 0 "WHM plugin registered with AppConfig"
+elif [ -x "$IS_REG" ] && [ "$($IS_REG whostmgr hyperspeed_pro 2>/dev/null)" = "1" ]; then
+    check_status 0 "WHM plugin registered with AppConfig"
+elif grep -q '#WHMADDON' "$CGI_FILE" 2>/dev/null; then
+    check_warning 1 "AppConfig conf not found in /var/cpanel/apps/ - plugin uses #WHMADDON nav registration"
 else
-    # Fall back: check WHMADDON comment in CGI (alternative registration mechanism)
-    CGI_FILE="/usr/local/cpanel/whostmgr/docroot/cgi/hyperspeed_pro/index.cgi"
-    if grep -q '#WHMADDON' "$CGI_FILE" 2>/dev/null; then
-        check_status 0 "WHM plugin has #WHMADDON self-registration comment"
-    else
-        check_status 1 "WHM plugin may not appear in navigation menu"
-    fi
+    check_status 1 "WHM plugin NOT registered with AppConfig (menu link will not appear)"
 fi
 
 echo ""
@@ -155,6 +156,7 @@ for theme in jupiter paper_lantern; do
     if [ -d "$theme_dir" ]; then
         interface_files=(
             "${theme_dir}/index.html"
+            "${theme_dir}/index.live.php"
             "${theme_dir}/assets/dashboard.js"
             "${theme_dir}/assets/style.css"
         )
@@ -168,6 +170,19 @@ for theme in jupiter paper_lantern; do
         break  # only check first found theme
     fi
 done
+
+# Check cPanel dynamicui registration (either via install_plugin output or fallback)
+CPANEL_REGISTERED=false
+for theme in jupiter paper_lantern; do
+    if [ -f "/usr/local/cpanel/base/frontend/${theme}/dynamicui/dynamicui_hyperspeed.conf" ]; then
+        check_status 0 "cPanel dynamicui entry present [${theme}]"
+        CPANEL_REGISTERED=true
+        break
+    fi
+done
+if [ "$CPANEL_REGISTERED" = "false" ]; then
+    check_warning 1 "cPanel dynamicui_hyperspeed.conf not found (reinstall may be needed)"
+fi
 
 echo ""
 
@@ -210,15 +225,33 @@ else
     check_status 1 "PHP is not installed"
 fi
 
-# PHP Redis extension
-if php -m | grep -q redis; then
+# PHP Redis extension - needed by PerformanceEngine.php background process.
+# Not required for the WHM CGI plugin (which uses redis-cli directly).
+# Check EA PHP first, then fall back to system php.
+PHP_REDIS_FOUND=false
+for phpbin in /opt/cpanel/ea-php*/root/usr/bin/php /usr/bin/php php; do
+    [ -x "$phpbin" ] || continue
+    if "$phpbin" -m 2>/dev/null | grep -qi '^redis'; then
+        PHP_REDIS_FOUND=true
+        break
+    fi
+done
+if [ "$PHP_REDIS_FOUND" = "true" ]; then
     check_status 0 "PHP Redis extension loaded"
 else
-    check_status 1 "PHP Redis extension not found"
+    check_warning 1 "PHP Redis extension not found (optional — install via: dnf install ea-php##-php-redis)"
 fi
 
 # PHP Memcached extension
-if php -m | grep -q memcached; then
+PHP_MC_FOUND=false
+for phpbin in /opt/cpanel/ea-php*/root/usr/bin/php /usr/bin/php php; do
+    [ -x "$phpbin" ] || continue
+    if "$phpbin" -m 2>/dev/null | grep -qi '^memcached'; then
+        PHP_MC_FOUND=true
+        break
+    fi
+done
+if [ "$PHP_MC_FOUND" = "true" ]; then
     check_status 0 "PHP Memcached extension loaded"
 else
     check_warning 1 "PHP Memcached extension not found (optional)"

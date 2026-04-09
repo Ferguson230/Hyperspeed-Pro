@@ -144,13 +144,27 @@ if [ -x "$INSTALL_PLUGIN" ] && [ -f "./install.json" ]; then
         cp -r ./cpanel-interface/* "${TEMP_PLUGIN_SRC}/hyperspeed/"
     fi
     cp ./install.json "${TEMP_PLUGIN_SRC}/"
-    if "$INSTALL_PLUGIN" "${TEMP_PLUGIN_SRC}" >> /var/log/hyperspeed_pro/install.log 2>&1; then
+    # install_plugin may validate the icon - copy it into the temp dir
+    for iconpath in "${PLUGIN_DIR_JP}/hyperspeed-icon.png" "${PLUGIN_DIR_PL}/hyperspeed-icon.png"; do
+        [ -f "$iconpath" ] && cp "$iconpath" "${TEMP_PLUGIN_SRC}/" && break
+    done
+
+    INSTALL_OK=false
+    if "$INSTALL_PLUGIN" "${TEMP_PLUGIN_SRC}" --theme=jupiter >> /var/log/hyperspeed_pro/install.log 2>&1; then
+        INSTALL_OK=true
+    fi
+    # Also install to paper_lantern if it exists
+    if [ -d "/usr/local/cpanel/base/frontend/paper_lantern" ]; then
+        "$INSTALL_PLUGIN" "${TEMP_PLUGIN_SRC}" --theme=paper_lantern >> /var/log/hyperspeed_pro/install.log 2>&1 || true
+    fi
+
+    rm -rf "${TEMP_PLUGIN_SRC}"
+    if [ "$INSTALL_OK" = "true" ]; then
         echo -e "${GREEN}\u2713 Registered with cPanel via install_plugin${NC}"
         REGISTERED_CPANEL=true
     else
         echo -e "${YELLOW}\u26a0 install_plugin returned non-zero (see /var/log/hyperspeed_pro/install.log)${NC}"
     fi
-    rm -rf "${TEMP_PLUGIN_SRC}"
 fi
 
 if [ "$REGISTERED_CPANEL" != "true" ]; then

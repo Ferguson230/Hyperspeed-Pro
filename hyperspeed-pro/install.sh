@@ -156,6 +156,13 @@ elif [[ "$PKG_MANAGER" == "dnf" ]]; then
         dnf install -y "$pkg" >> "$INSTALL_LOG" 2>&1 || \
             echo "Optional package not available, skipping: $pkg" >> "$INSTALL_LOG"
     done
+
+    # Install PHP Redis extension for whichever EasyApache PHP version is active
+    # ea-php##-php-redis must NOT conflict with cPanel since they are EA packages
+    echo "Attempting EA PHP Redis/Memcached extension install..." >> "$INSTALL_LOG"
+    for phpver in ea-php83 ea-php82 ea-php81; do
+        dnf install -y "${phpver}-php-redis" "${phpver}-php-memcached" >> "$INSTALL_LOG" 2>&1 || true
+    done
 fi
 
 echo -e "${GREEN}✓ Dependencies installed${NC}"
@@ -250,20 +257,27 @@ echo -e "${YELLOW}Registering with AppConfig...${NC}"
 if [ -f "./appconfig.conf" ]; then
     APPCONFIG_BIN="/usr/local/cpanel/bin/register_appconfig"
     UNREGISTER_BIN="/usr/local/cpanel/bin/unregister_appconfig"
-    APPCONFIG_CONF="$(pwd)/appconfig.conf"
 
     if [ -x "$APPCONFIG_BIN" ]; then
+        # register_appconfig copies the conf file to /var/cpanel/apps/ using the SOURCE
+        # filename as the registered name.  We must pass a file named hyperspeed_pro.conf
+        # so register_appconfig creates /var/cpanel/apps/hyperspeed_pro.conf and
+        # is_registered_with_appconfig whostmgr hyperspeed_pro returns 1.
+        APPCONFIG_TMPCONF="/tmp/hyperspeed_pro_appconfig_$$.conf"
+        cp ./appconfig.conf "$APPCONFIG_TMPCONF"
+
         # Clean any previously failed registration first
         [ -x "$UNREGISTER_BIN" ] && "$UNREGISTER_BIN" hyperspeed_pro >> "$INSTALL_LOG" 2>&1 || true
+        rm -f /var/cpanel/apps/hyperspeed_pro.conf 2>/dev/null || true
         sleep 1
-        if "$APPCONFIG_BIN" "$APPCONFIG_CONF" >> "$INSTALL_LOG" 2>&1; then
+
+        if "$APPCONFIG_BIN" "$APPCONFIG_TMPCONF" >> "$INSTALL_LOG" 2>&1; then
             echo -e "${GREEN}\u2713 AppConfig registration complete${NC}"
         else
-            APPCONFIG_ERR=$(tail -5 "$INSTALL_LOG" 2>/dev/null)
             echo -e "${YELLOW}\u26a0 register_appconfig failed (details in ${INSTALL_LOG})${NC}"
-            echo -e "${YELLOW}  → Plugin will still appear via #WHMADDON comment in index.cgi${NC}"
-            echo -e "${YELLOW}  → After install, run: /usr/local/cpanel/scripts/restartsrv_cpsrvd${NC}"
+            echo -e "${YELLOW}  \u2192 Plugin will still appear via #WHMADDON comment in index.cgi${NC}"
         fi
+        rm -f "$APPCONFIG_TMPCONF"
     else
         echo -e "${YELLOW}\u26a0 register_appconfig not found - plugin appears via #WHMADDON only${NC}"
     fi
