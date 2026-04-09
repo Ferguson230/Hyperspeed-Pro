@@ -104,29 +104,8 @@ echo ""
 ###############################################################################
 # Confirm
 ###############################################################################
-echo -e "${YELLOW}This will install:${NC}"
-echo "  - WHM Plugin (server-wide management)"
-echo "  - cPanel Plugin (per-user interface)"
-echo "  - Redis, Memcached, performance engine"
+echo -e "${YELLOW}Installing:${NC} WHM Plugin, cPanel Plugin, Redis, Memcached, performance engine"
 echo ""
-
-REPLY=""
-if [ -t 0 ]; then
-    read -r -p "Continue with installation? [y/N] " REPLY
-else
-    # piped mode (curl | bash) — read from terminal
-    if [ -c /dev/tty ]; then
-        read -r -p "Continue with installation? [y/N] " REPLY </dev/tty
-    else
-        REPLY="y"   # fully non-interactive: auto-confirm
-    fi
-fi
-
-echo ""
-case "$REPLY" in
-    [Yy]|[Yy][Ee][Ss]) : ;;
-    *) echo "Installation cancelled."; trap - EXIT; exit 0 ;;
-esac
 
 ###############################################################################
 # [2/7] Prepare directory
