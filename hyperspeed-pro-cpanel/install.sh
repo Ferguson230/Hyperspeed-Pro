@@ -89,6 +89,11 @@ if [ -f "./uapi/HyperSpeed.pm" ]; then
     cp ./uapi/HyperSpeed.pm "${UAPI_DIR}/"
 fi
 
+# Copy sync service PHP worker into the shared HyperSpeed lib dir created by the WHM install
+if [ -f "./lib/sync-users.php" ]; then
+    cp ./lib/sync-users.php "/usr/local/cpanel/lib/hyperspeed_pro/"
+fi
+
 # Set permissions for both themes
 for PDIR in "${PLUGIN_DIR_PL}" "${PLUGIN_DIR_JP}"; do
     chmod 755 "${PDIR}" 2>/dev/null || true
@@ -99,6 +104,9 @@ chmod 755 "${API_DIR}"
 find "${API_DIR}" -name "*.pm" -exec chmod 644 {} \; 2>/dev/null || true
 if [ -f "${UAPI_DIR}/HyperSpeed.pm" ]; then
     chmod 644 "${UAPI_DIR}/HyperSpeed.pm"
+fi
+if [ -f "/usr/local/cpanel/lib/hyperspeed_pro/sync-users.php" ]; then
+    chmod 755 "/usr/local/cpanel/lib/hyperspeed_pro/sync-users.php"
 fi
 
 echo -e "${GREEN}✓ Plugin files installed${NC}"
