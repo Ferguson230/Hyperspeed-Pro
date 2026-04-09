@@ -196,13 +196,16 @@ fi
 # Extract archive
 echo "  Extracting files..."
 tar -xzf hyperspeed-pro.tar.gz
-# GitHub main branch archives extract as RepoName-main/
+# GitHub main branch archives extract as RepoName-main/ (case may vary)
 EXTRACTED_DIR=$(tar -tzf hyperspeed-pro.tar.gz 2>/dev/null | head -1 | cut -d/ -f1)
 if [ -z "$EXTRACTED_DIR" ] || [ ! -d "$EXTRACTED_DIR" ]; then
     echo -e "${RED}✗ Extraction failed - could not find extracted directory${NC}"
     exit 1
 fi
-mv "$EXTRACTED_DIR" hyperspeed-pro
+# Always normalise to 'hyperspeed-pro' so subsequent paths are predictable
+if [ "$EXTRACTED_DIR" != "hyperspeed-pro" ]; then
+    mv "$EXTRACTED_DIR" hyperspeed-pro
+fi
 
 if [ ! -d "hyperspeed-pro" ]; then
     echo -e "${RED}✗ Extraction failed${NC}"
@@ -229,7 +232,7 @@ echo ""
 echo -e "${BLUE}[5/9] Installing WHM Plugin...${NC}"
 echo ""
 
-cd hyperspeed-pro/hyperspeed-pro
+cd "$INSTALL_DIR/hyperspeed-pro/hyperspeed-pro"
 chmod +x install.sh
 
 if ./install.sh; then
@@ -249,7 +252,7 @@ echo ""
 echo -e "${BLUE}[6/9] Installing cPanel Plugin...${NC}"
 echo ""
 
-cd ../hyperspeed-pro-cpanel
+cd "$INSTALL_DIR/hyperspeed-pro/hyperspeed-pro-cpanel"
 chmod +x install.sh
 
 if ./install.sh; then
