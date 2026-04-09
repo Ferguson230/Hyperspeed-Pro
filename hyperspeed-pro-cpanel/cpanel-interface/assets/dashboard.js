@@ -54,72 +54,140 @@ async function loadUserInfo() {
  */
 async function loadDashboardData() {
     try {
-        // Load domains
-        const domainsResponse = await fetch('/execute/HyperSpeed/get_domains');
-        const domainsData = await domainsResponse.json();
-        
+        const [statusResponse, domainsResponse, statsResponse, securityResponse, resourceResponse] = await Promise.all([
+            fetch('/execute/HyperSpeed/get_status'),
+            fetch('/execute/HyperSpeed/get_domains'),
+            fetch('/execute/HyperSpeed/get_stats'),
+            fetch('/execute/HyperSpeed/get_security_stats'),
+            fetch('/execute/HyperSpeed/get_resource_usage')
+        ]);
+
+        const [statusData, domainsData, statsData, securityData, resourceData] = await Promise.all([
+            statusResponse.json(),
+            domainsResponse.json(),
+            statsResponse.json(),
+            securityResponse.json(),
+            resourceResponse.json()
+        ]);
+
+        const summary = (statsData?.summary && typeof statsData.summary === 'object')
+            ? statsData.summary
+            : (statusData?.status === 1 && statusData?.data?.summary && typeof statusData.data.summary === 'object'
+                ? statusData.data.summary
+                : null);
+        const statsByDomain = statsData?.status === 1 && statsData.data && typeof statsData.data === 'object'
+            ? statsData.data
+            : {};
+
         if (domainsData.status === 1) {
-            userDomains = domainsData.data;
-            updateDashboard(domainsData.data);
+            userDomains = mergeDomainStats(domainsData.data, statsByDomain, summary);
+            updateDashboard(userDomains, summary);
             populateDomainSelectors();
         }
-        
-        // Load stats
-        const statsResponse = await fetch('/execute/HyperSpeed/get_stats');
-        const statsData = await statsResponse.json();
-        
+
         if (statsData.status === 1) {
-            updateStats(statsData.data);
+            updateStats(statsData);
         }
-        
-        // Load resource usage
-        const resourceResponse = await fetch('/execute/HyperSpeed/get_resource_usage');
-        const resourceData = await resourceResponse.json();
-        
+
+        if (securityData.status === 1) {
+            updateSecurityStats(securityData.data);
+        }
+
         if (resourceData.status === 1) {
             updateResourceUsage(resourceData.data);
         }
-        
+
     } catch (error) {
         console.error('Failed to load dashboard data:', error);
         showToast('Failed to load dashboard data', 'error');
     }
 }
 
+function mergeDomainStats(domains, statsByDomain, summary) {
+    return domains.map(domain => {
+        const mergedStats = statsByDomain?.[domain.name]
+            ? { ...(domain.stats || {}), ...statsByDomain[domain.name] }
+            : domain.stats;
+
+        if (mergedStats) {
+            return { ...domain, stats: mergedStats };
+        }
+
+        if (summary && domains.length === 1) {
+            return {
+                ...domain,
+                stats: {
+                    cache_hits: summary.cache_hits || 0,
+                    cache_misses: summary.cache_miss || 0,
+                    hit_rate: summary.hit_rate || 0,
+                    bandwidth_saved: summary.bandwidth_saved || 0,
+                    blocked: summary.blocked || 0,
+                    scope: 'server'
+                }
+            };
+        }
+
+        return domain;
+    });
+}
+
+function buildSummaryFromDomains(domains) {
+    let totalHits = 0;
+    let totalMisses = 0;
+
+    domains.forEach(domain => {
+        if (domain.stats) {
+            totalHits += parseInt(domain.stats.cache_hits, 10) || 0;
+            totalMisses += parseInt(domain.stats.cache_misses, 10) || 0;
+        }
+    });
+
+    const totalRequests = totalHits + totalMisses;
+    const hitRate = totalRequests > 0 ? ((totalHits / totalRequests) * 100).toFixed(1) : '0.0';
+
+    return {
+        cache_hits: totalHits,
+        cache_miss: totalMisses,
+        total_requests: totalRequests,
+        hit_rate: hitRate,
+        perf_boost: totalHits > 0 ? Math.floor(100 + ((parseFloat(hitRate) / 100) * 300)) : 0,
+        bandwidth_gb: ((totalHits * 51200) / 1073741824).toFixed(1)
+    };
+}
+
 /**
  * Update dashboard with domain data
  */
-function updateDashboard(domains) {
+function updateDashboard(domains, summary = null) {
     // Update active domains count
     document.getElementById('activeDomains').textContent = domains.length;
-    
-    // Calculate aggregate stats
-    let totalHits = 0;
-    let totalMisses = 0;
-    let totalBandwidth = 0;
-    
-    domains.forEach(domain => {
-        if (domain.stats) {
-            totalHits += parseInt(domain.stats.cache_hits) || 0;
-            totalMisses += parseInt(domain.stats.cache_misses) || 0;
-        }
-    });
-    
-    const totalRequests = totalHits + totalMisses;
-    const hitRate = totalRequests > 0 ? ((totalHits / totalRequests) * 100).toFixed(1) : 0;
+
+    const liveSummary = summary || buildSummaryFromDomains(domains);
+    const totalHits = parseInt(
+        liveSummary.cache_hits ?? ((liveSummary.cache_hit_redis || 0) + (liveSummary.cache_hit_memcached || 0)),
+        10
+    ) || 0;
+    const totalMisses = parseInt(liveSummary.cache_miss ?? 0, 10) || 0;
+    const totalRequests = parseInt(liveSummary.total_requests ?? (totalHits + totalMisses), 10) || 0;
+    const hitRate = liveSummary.hit_rate !== undefined
+        ? Number.parseFloat(liveSummary.hit_rate).toFixed(1)
+        : (totalRequests > 0 ? ((totalHits / totalRequests) * 100).toFixed(1) : '0.0');
+    const perfBoost = liveSummary.perf_boost !== undefined
+        ? Math.floor(liveSummary.perf_boost)
+        : (totalHits > 0 ? Math.floor(100 + ((Number.parseFloat(hitRate) / 100) * 300)) : 0);
+    const bandwidthSaved = liveSummary.bandwidth_gb !== undefined
+        ? Number.parseFloat(liveSummary.bandwidth_gb).toFixed(1)
+        : ((totalHits * 51200) / 1073741824).toFixed(1);
     
     // Update cache hit rate
     document.getElementById('cacheHitRate').textContent = hitRate + '%';
     document.getElementById('cacheStats').textContent = 
         `${totalHits.toLocaleString()} of ${totalRequests.toLocaleString()} requests`;
     
-    // Estimate performance boost
-    const perfBoost = Math.floor(150 + (hitRate * 2));
-    document.getElementById('perfBoost').textContent = perfBoost + '%';
+    document.getElementById('perfBoost').textContent = perfBoost > 0 ? perfBoost + '%' : 'Warming up';
     
-    // Estimate bandwidth saved (rough calculation)
-    const bandwidthSaved = (totalHits * 0.05).toFixed(2); // Assume 50KB per cached request
-    document.getElementById('bandwidthSaved').textContent = bandwidthSaved + ' GB';
+    document.getElementById('bandwidthSaved').textContent =
+        Number.parseFloat(bandwidthSaved) > 0 ? bandwidthSaved + ' GB' : 'Warming up';
     
     // Update domains list
     updateDomainsList(domains);
@@ -144,6 +212,9 @@ function updateDomainsList(domains) {
         domainCard.className = 'domain-card';
         
         const stats = domain.stats || {cache_hits: 0, cache_misses: 0, hit_rate: 0};
+        const scopeNote = stats.scope === 'server'
+            ? '<div class="domain-note">Using shared live server totals for this account</div>'
+            : '';
         
         domainCard.innerHTML = `
             <div class="domain-header">
@@ -166,6 +237,7 @@ function updateDomainsList(domains) {
                     <span class="stat-value">${parseInt(stats.cache_misses).toLocaleString()}</span>
                 </div>
             </div>
+            ${scopeNote}
             <div class="domain-actions">
                 <button class="btn btn-sm btn-secondary" onclick="clearDomainCache('${domain.name}')">
                     Clear Cache
@@ -209,7 +281,16 @@ function populateDomainSelectors() {
  */
 function updateStats(stats) {
     dashboardData.stats = stats;
-    // Stats are already included in domain data
+    dashboardData.summary = stats.summary || null;
+}
+
+function updateSecurityStats(stats) {
+    document.getElementById('blockedRequests').textContent =
+        (parseInt(stats.blocked_requests, 10) || 0).toLocaleString();
+    document.getElementById('rateLimitHits').textContent =
+        (parseInt(stats.rate_limit_hits, 10) || 0).toLocaleString();
+    document.getElementById('botDetections').textContent =
+        (parseInt(stats.bot_detections, 10) || 0).toLocaleString();
 }
 
 /**
@@ -552,10 +633,16 @@ function displaySecurityExemptions(exemptions) {
  * Load security stats
  */
 async function loadSecurityStats() {
-    // Placeholder - would load from API
-    document.getElementById('blockedRequests').textContent = '142';
-    document.getElementById('rateLimitHits').textContent = '28';
-    document.getElementById('botDetections').textContent = '63';
+    try {
+        const response = await fetch('/execute/HyperSpeed/get_security_stats');
+        const data = await response.json();
+
+        if (data.status === 1) {
+            updateSecurityStats(data.data);
+        }
+    } catch (error) {
+        console.error('Failed to load security stats:', error);
+    }
 }
 
 /**

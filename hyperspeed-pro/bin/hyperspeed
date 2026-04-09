@@ -91,7 +91,7 @@ function showStatus() {
     echo "Services:\n";
     
     // Redis
-    $redisStatus = checkService('redis-server');
+    $redisStatus = checkService('redis-server') || checkService('redis');
     echo "  Redis: " . ($redisStatus ? "✓ Running" : "✗ Stopped") . "\n";
     
     // Memcached
@@ -143,6 +143,30 @@ function flushCache($options) {
 }
 
 /**
+ * Sum matching Redis string values
+ */
+function sumRedisPatternValues($redis, $pattern) {
+    $sum = 0;
+    $keys = $redis->keys($pattern);
+
+    foreach ($keys as $key) {
+        $value = $redis->get($key);
+        if (is_numeric($value)) {
+            $sum += $value + 0;
+        }
+    }
+
+    return $sum;
+}
+
+/**
+ * Count matching Redis keys
+ */
+function countRedisKeys($redis, $pattern) {
+    return count($redis->keys($pattern));
+}
+
+/**
  * Show statistics
  */
 function showStatistics() {
@@ -153,10 +177,20 @@ function showStatistics() {
     $redis = new Redis();
     $redis->connect('127.0.0.1', 6379);
     
-    // Get metrics
-    $cacheHitRedis = $redis->get('metrics:cache_hit_redis:' . date('Y-m-d-H')) ?: 0;
-    $cacheHitMemcached = $redis->get('metrics:cache_hit_memcached:' . date('Y-m-d-H')) ?: 0;
-    $cacheMiss = $redis->get('metrics:cache_miss:' . date('Y-m-d-H')) ?: 0;
+    $statsInfo = $redis->info('stats');
+
+    // Get metrics using the same retained counters as WHM and cPanel.
+    $cacheHitRedis = sumRedisPatternValues($redis, 'metrics:cache_hit_redis:*');
+    $cacheHitMemcached = sumRedisPatternValues($redis, 'metrics:cache_hit_memcached:*');
+    $cacheMiss = (int)($statsInfo['keyspace_misses'] ?? 0);
+
+    if ($cacheHitRedis === 0 && $cacheHitMemcached === 0 && !empty($statsInfo['keyspace_hits'])) {
+        $cacheHitRedis = (int)$statsInfo['keyspace_hits'];
+    }
+
+    if ($cacheMiss === 0) {
+        $cacheMiss = sumRedisPatternValues($redis, 'metrics:cache_miss:*');
+    }
     
     $totalRequests = $cacheHitRedis + $cacheHitMemcached + $cacheMiss;
     $cacheHits = $cacheHitRedis + $cacheHitMemcached;
@@ -182,17 +216,17 @@ function showStatistics() {
     echo "\n";
     
     // Security stats
-    $blockedRequests = 0;
-    $keys = $redis->keys('security:events:*:' . date('Y-m-d'));
-    foreach ($keys as $key) {
-        $blockedRequests += (int)$redis->get($key);
-    }
-    
-    $blacklistedIPs = count($redis->keys('blacklist:*'));
+    $blockedRequests = sumRedisPatternValues($redis, 'security:events:*:' . date('Y-m-d'));
+    $blacklistedIPs = countRedisKeys($redis, 'blacklist:*');
+    $rateLimited = sumRedisPatternValues($redis, 'metrics:rate_limited:*');
+    $botDetections = sumRedisPatternValues($redis, 'metrics:bots_detected:*') +
+        sumRedisPatternValues($redis, 'metrics:bot_detections:*');
     
     echo "Security (today):\n";
     echo "  Blocked Requests: " . number_format($blockedRequests) . "\n";
     echo "  Blacklisted IPs: " . number_format($blacklistedIPs) . "\n";
+    echo "  Rate-Limited Requests: " . number_format($rateLimited) . "\n";
+    echo "  Bot Detections: " . number_format($botDetections) . "\n";
 }
 
 /**

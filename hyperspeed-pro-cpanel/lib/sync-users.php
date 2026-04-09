@@ -36,7 +36,6 @@ class HyperSpeedSync
         try {
             $this->redis = new Redis();
             $this->redis->connect('127.0.0.1', 6379);
-            $this->redis->setOption(Redis::OPT_PREFIX, 'hyperspeed:');
         } catch (Exception $e) {
             $this->log("Failed to connect to Redis: " . $e->getMessage(), 'ERROR');
             exit(1);

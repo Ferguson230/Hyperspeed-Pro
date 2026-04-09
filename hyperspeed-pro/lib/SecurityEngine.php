@@ -142,6 +142,7 @@ class SecurityEngine
         // Check if this is part of a DDoS attack
         if ($requests > $burstLimit) {
             $this->blacklistIP($ip, 300); // 5 minute blacklist
+            $this->incrementMetric('rate_limited');
             $this->logSecurity("Rate limit exceeded (burst): $ip ($requests requests)", 'WARN');
             return [
                 'allowed' => false,
@@ -152,6 +153,7 @@ class SecurityEngine
         }
         
         if ($requests > $limit) {
+            $this->incrementMetric('rate_limited');
             $this->logSecurity("Rate limit exceeded: $ip ($requests requests)", 'WARN');
             return [
                 'allowed' => false,
@@ -185,6 +187,7 @@ class SecurityEngine
         
         if ($count > $threshold) {
             $this->blacklistIP($ip, 3600); // 1 hour blacklist
+            $this->incrementMetric('ddos_attacks');
             $this->logSecurity("DDoS attack detected from $ip", 'CRITICAL');
             return [
                 'allowed' => false,
@@ -226,6 +229,7 @@ class SecurityEngine
             if (strpos($lowerUA, $pattern) !== false) {
                 // Additional validation for legitimate tools
                 if (!$this->isLegitimateBot($ip, $userAgent)) {
+                    $this->incrementMetric('bots_detected');
                     $this->logSecurity("Bad bot detected: $userAgent from $ip", 'WARN');
                     return ['is_bot' => true, 'is_bad_bot' => true, 'type' => 'malicious'];
                 }
@@ -234,6 +238,7 @@ class SecurityEngine
         
         // Check for missing or suspicious User-Agent
         if (empty($userAgent) || strlen($userAgent) < 10) {
+            $this->incrementMetric('bots_detected');
             return ['is_bot' => true, 'is_bad_bot' => true, 'type' => 'suspicious'];
         }
         
@@ -328,6 +333,16 @@ class SecurityEngine
     {
         $key = self::BLACKLIST_PREFIX . $ip;
         return $this->redis->exists($key);
+    }
+
+    /**
+     * Increment retained hourly metrics for dashboard consumers
+     */
+    private function incrementMetric($metric, $value = 1)
+    {
+        $key = 'metrics:' . $metric . ':' . date('Y-m-d-H');
+        $this->redis->incrBy($key, $value);
+        $this->redis->expire($key, 86400 * 7);
     }
     
     /**

@@ -268,12 +268,11 @@ sub _redis_info_field {
     return 0;
 }
 
-# Sum all hourly metric key values for a given metric name
-# MetricsCollector stores: metrics:<name>:YYYY-MM-DD-HH
-sub _sum_redis_metric {
-    my ($metric) = @_;
+# Sum all matching Redis string values for a pattern
+sub _sum_redis_pattern_values {
+    my ($pattern) = @_;
     my $keys_out = Cpanel::SafeRun::Simple::saferun(
-        '/usr/bin/redis-cli', '--scan', '--pattern', "metrics:${metric}:*"
+        '/usr/bin/redis-cli', '--scan', '--pattern', $pattern
     ) // '';
     my $total = 0;
     for my $key (split /\n/, $keys_out) {
@@ -284,6 +283,31 @@ sub _sum_redis_metric {
         $total += ($val =~ /^\d+$/ ? $val : 0);
     }
     return $total;
+}
+
+# Count matching Redis keys for a pattern
+sub _count_redis_keys {
+    my ($pattern) = @_;
+    my $keys_out = Cpanel::SafeRun::Simple::saferun(
+        '/usr/bin/redis-cli', '--scan', '--pattern', $pattern
+    ) // '';
+
+    my @keys = grep { length } map {
+        s/\s+//gr
+    } split /\n/, $keys_out;
+
+    return scalar @keys;
+}
+
+# MetricsCollector stores: metrics:<name>:YYYY-MM-DD-HH
+sub _sum_redis_metric {
+    my ($metric) = @_;
+    return _sum_redis_pattern_values("metrics:${metric}:*");
+}
+
+sub _today_ymd {
+    my @t = localtime();
+    return sprintf('%04d-%02d-%02d', $t[5] + 1900, $t[4] + 1, $t[3]);
 }
 
 sub get_metrics {
@@ -308,10 +332,13 @@ sub get_metrics {
 }
 
 sub get_security_stats {
+    my $today = _today_ymd();
     return {
-        blocked_requests => _sum_redis_metric('blocked_requests'),
-        blacklisted_ips  => _sum_redis_metric('blacklisted_ips'),
+        blocked_requests => _sum_redis_pattern_values("security:events:*:$today"),
+        blacklisted_ips  => _count_redis_keys('blacklist:*'),
         ddos_attacks     => _sum_redis_metric('ddos_attacks'),
+        rate_limited     => _sum_redis_metric('rate_limited'),
+        bot_detections   => _sum_redis_metric('bots_detected') + _sum_redis_metric('bot_detections'),
     };
 }
 

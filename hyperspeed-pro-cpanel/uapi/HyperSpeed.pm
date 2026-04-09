@@ -78,6 +78,115 @@ sub _redis_cli_info {
     return 0;
 }
 
+sub _today_ymd {
+    my @t = localtime();
+    return sprintf('%04d-%02d-%02d', $t[5] + 1900, $t[4] + 1, $t[3]);
+}
+
+sub _sum_redis_pattern_values {
+    my ($pattern) = @_;
+    my $keys_out = Cpanel::SafeRun::Simple::saferun(
+        '/usr/bin/redis-cli', '--scan', '--pattern', $pattern
+    ) // '';
+
+    my $total = 0;
+    for my $key (split /\n/, $keys_out) {
+        $key =~ s/\s+//g;
+        next unless $key;
+
+        my $val = Cpanel::SafeRun::Simple::saferun('/usr/bin/redis-cli', 'GET', $key) // '0';
+        $val =~ s/\s+//g;
+        $total += 0 + $val if $val =~ /^-?\d+(?:\.\d+)?$/;
+    }
+
+    return $total;
+}
+
+sub _count_redis_keys {
+    my ($pattern) = @_;
+    my $keys_out = Cpanel::SafeRun::Simple::saferun(
+        '/usr/bin/redis-cli', '--scan', '--pattern', $pattern
+    ) // '';
+
+    my @keys = grep { length } map {
+        s/\s+//gr
+    } split /\n/, $keys_out;
+
+    return scalar @keys;
+}
+
+sub _get_global_cache_summary {
+    my $hits           = _redis_cli_info('keyspace_hits');
+    my $misses         = _redis_cli_info('keyspace_misses');
+    my $redis_hits     = _sum_redis_pattern_values('metrics:cache_hit_redis:*');
+    my $memcached_hits = _sum_redis_pattern_values('metrics:cache_hit_memcached:*');
+
+    if ($redis_hits == 0 && $memcached_hits == 0 && $hits > 0) {
+        $redis_hits = $hits;
+    }
+
+    my $cache_hits     = $redis_hits + $memcached_hits;
+    my $total_requests = $cache_hits + $misses;
+    my $hit_rate       = $total_requests > 0 ? sprintf('%.1f', ($cache_hits / $total_requests) * 100) : '0.0';
+    my $bw_bytes       = $cache_hits * 51_200;
+    my $bandwidth_gb   = $bw_bytes > 0 ? sprintf('%.1f', $bw_bytes / 1_073_741_824) : '0.0';
+    my $perf_boost     = $cache_hits > 0 ? int(100 + (($hit_rate / 100) * 300)) : 0;
+
+    return {
+        cache_hit_redis     => $redis_hits,
+        cache_hit_memcached => $memcached_hits,
+        cache_hits          => $cache_hits,
+        cache_miss          => $misses + 0,
+        total_requests      => $total_requests + 0,
+        hit_rate            => $hit_rate,
+        bandwidth_saved     => $bw_bytes + 0,
+        bandwidth_gb        => $bandwidth_gb,
+        perf_boost          => $perf_boost,
+    };
+}
+
+sub _get_global_security_stats {
+    my $today = _today_ymd();
+
+    return {
+        blocked_requests => _sum_redis_pattern_values("security:events:*:$today"),
+        rate_limit_hits  => _sum_redis_pattern_values('metrics:rate_limited:*'),
+        bot_detections   => _sum_redis_pattern_values('metrics:bots_detected:*') +
+                            _sum_redis_pattern_values('metrics:bot_detections:*'),
+        blacklisted_ips  => _count_redis_keys('blacklist:*'),
+        ddos_attacks     => _sum_redis_pattern_values('metrics:ddos_attacks:*'),
+    };
+}
+
+sub _get_domain_stats {
+    my ($r, $domain, $summary, $security, $domain_count) = @_;
+
+    my $hits    = _rget_int($r, "domain:$domain:cache_hits");
+    my $misses  = _rget_int($r, "domain:$domain:cache_misses");
+    my $bw      = _rget($r, "domain:$domain:bandwidth_saved") // 0;
+    my $blocked = _rget_int($r, "domain:$domain:blocked");
+    my $scope   = 'domain';
+
+    if ($hits == 0 && $misses == 0 && !$bw && !$blocked && $domain_count == 1) {
+        $hits    = $summary->{cache_hits} + 0;
+        $misses  = $summary->{cache_miss} + 0;
+        $bw      = $summary->{bandwidth_saved} + 0;
+        $blocked = $security->{blocked_requests} + 0;
+        $scope   = 'server';
+    }
+
+    my $total = $hits + $misses;
+
+    return {
+        cache_hits      => $hits,
+        cache_misses    => $misses,
+        hit_rate        => $total > 0 ? sprintf('%.1f', ($hits / $total) * 100) : '0.0',
+        bandwidth_saved => $bw + 0,
+        blocked         => $blocked,
+        scope           => $scope,
+    };
+}
+
 # ── User / domain helpers ────────────────────────────────────────────────────
 
 sub _get_user { return $ENV{REMOTE_USER} || $ENV{USER} || '' }
@@ -137,14 +246,24 @@ Return plugin status and current user settings.
 
 sub get_status {
     my %OPTS = @_;
-    my $user = _get_user();
-    my $r    = _init_redis();
+    my $user     = _get_user();
+    my $r        = _init_redis();
+    my $summary  = _get_global_cache_summary();
+    my $security = _get_global_security_stats();
 
     my $result = {
         enabled => 1,
         user    => $user,
         version => $VERSION,
         redis   => $r ? 1 : 0,
+        summary => {
+            %$summary,
+            blocked         => $security->{blocked_requests},
+            blacklisted     => $security->{blacklisted_ips},
+            blocked_requests => $security->{blocked_requests},
+            blacklisted_ips  => $security->{blacklisted_ips},
+        },
+        security => $security,
         features => {
             page_cache   => 1,
             object_cache => 1,
@@ -171,27 +290,24 @@ Return all domains owned by the current user with per-domain cache stats.
 
 sub get_domains {
     my %OPTS = @_;
-    my $r    = _init_redis();
+    my $r       = _init_redis();
     my $domains = _get_user_domains();
+    my $summary = _get_global_cache_summary();
+    my $security = _get_global_security_stats();
+    my $domain_count = scalar @$domains;
     my @domain_list;
 
     for my $domain (@$domains) {
-        my $hits   = _rget_int($r, "domain:$domain:cache_hits");
-        my $misses = _rget_int($r, "domain:$domain:cache_misses");
-        my $total  = $hits + $misses;
+        my $stats = _get_domain_stats($r, $domain, $summary, $security, $domain_count);
 
         push @domain_list, {
             name          => $domain,
             cache_enabled => 1,
-            stats         => {
-                cache_hits   => $hits,
-                cache_misses => $misses,
-                hit_rate     => $total > 0 ? sprintf("%.1f", ($hits / $total) * 100) : '0.0',
-            },
+            stats         => $stats,
         };
     }
 
-    return { status => 1, data => \@domain_list };
+    return { status => 1, data => \@domain_list, summary => $summary };
 }
 
 =head2 flush_cache
@@ -275,27 +391,23 @@ sub get_stats {
         return { status => 0, errors => ['Access denied'] };
     }
 
-    my $r       = _init_redis();
-    my $domains = $domain ? [$domain] : _get_user_domains();
+    my $r        = _init_redis();
+    my $domains  = $domain ? [$domain] : _get_user_domains();
+    my $summary  = _get_global_cache_summary();
+    my $security = _get_global_security_stats();
+    my $domain_count = scalar @$domains;
     my %stats;
 
-    for my $d (@$domains) {
-        my $hits   = _rget_int($r, "domain:$d:cache_hits");
-        my $misses = _rget_int($r, "domain:$d:cache_misses");
-        my $bw     = _rget($r, "domain:$d:bandwidth_saved") // 0;
-        my $sec    = _rget_int($r, "domain:$d:blocked");
-        my $total  = $hits + $misses;
+    $summary->{blocked}          = $security->{blocked_requests};
+    $summary->{blacklisted}      = $security->{blacklisted_ips};
+    $summary->{blocked_requests} = $security->{blocked_requests};
+    $summary->{blacklisted_ips}  = $security->{blacklisted_ips};
 
-        $stats{$d} = {
-            cache_hits      => $hits,
-            cache_misses    => $misses,
-            hit_rate        => $total > 0 ? sprintf("%.1f", ($hits / $total) * 100) : '0.0',
-            bandwidth_saved => $bw + 0,
-            blocked         => $sec,
-        };
+    for my $d (@$domains) {
+        $stats{$d} = _get_domain_stats($r, $d, $summary, $security, $domain_count);
     }
 
-    return { status => 1, data => \%stats };
+    return { status => 1, data => \%stats, summary => $summary };
 }
 
 =head2 get_security_stats
@@ -305,24 +417,10 @@ Return security event counts across all user-owned domains.
 =cut
 
 sub get_security_stats {
-    my %OPTS  = @_;
-    my $r     = _init_redis();
-    my $domains = _get_user_domains();
-
-    my ($blocked, $rate_limited, $bots) = (0, 0, 0);
-    for my $d (@$domains) {
-        $blocked      += _rget_int($r, "domain:$d:blocked");
-        $rate_limited += _rget_int($r, "domain:$d:rate_limited");
-        $bots         += _rget_int($r, "domain:$d:bots_detected");
-    }
-
+    my %OPTS = @_;
     return {
         status => 1,
-        data   => {
-            blocked_requests => $blocked,
-            rate_limit_hits  => $rate_limited,
-            bot_detections   => $bots,
-        },
+        data   => _get_global_security_stats(),
     };
 }
 

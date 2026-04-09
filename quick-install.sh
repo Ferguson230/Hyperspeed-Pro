@@ -61,7 +61,9 @@ dl hyperspeed-pro/systemd/hyperspeed-engine.service
 # cPanel plugin files
 dl hyperspeed-pro-cpanel/install.sh
 dl hyperspeed-pro-cpanel/uninstall.sh
+dl hyperspeed-pro-cpanel/install.json
 dl hyperspeed-pro-cpanel/cpanel-interface/index.html
+dl hyperspeed-pro-cpanel/cpanel-interface/index.live.php
 dl hyperspeed-pro-cpanel/cpanel-interface/assets/dashboard.js
 dl hyperspeed-pro-cpanel/cpanel-interface/assets/style.css
 dl hyperspeed-pro-cpanel/lib/sync-users.php
