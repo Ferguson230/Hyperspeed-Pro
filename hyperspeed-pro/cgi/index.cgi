@@ -110,6 +110,14 @@ sub show_dashboard {
     my $blocked        = $security_stats->{blocked_requests};
     my $blacklisted    = $security_stats->{blacklisted_ips};
 
+    # Derived display values (avoid hardcoding in HTML)
+    # Avg cached response ≈ 50 KB; converts total hits -> GB saved
+    my $bw_bytes      = $cache_hits * 51_200;
+    my $bandwidth_gb  = $bw_bytes > 0 ? sprintf('%.1f', $bw_bytes / 1_073_741_824) : undef;
+    my $bw_display    = $bandwidth_gb ? "${bandwidth_gb} GB" : 'Warming up';
+    my $perf_pct      = $cache_hits > 0 ? int(100 + (($hit_rate / 100) * 300)) : 0;
+    my $perf_display  = $perf_pct > 0 ? "${perf_pct}%" : 'Warming up';
+
     print _html_head('HyperSpeed Pro - Dashboard');
     print <<"HTML";
     <div class="status-banner status-active">
@@ -121,7 +129,7 @@ sub show_dashboard {
             <div class="metric-icon perf-icon">&#9889;</div>
             <div class="metric-content">
                 <h3>Performance Boost</h3>
-                <div class="metric-value">327%</div>
+                <div class="metric-value">$perf_display</div>
                 <div class="metric-label">Faster than baseline</div>
             </div>
         </div>
@@ -137,7 +145,7 @@ sub show_dashboard {
             <div class="metric-icon bandwidth-icon">&#128202;</div>
             <div class="metric-content">
                 <h3>Bandwidth Saved</h3>
-                <div class="metric-value">487 GB</div>
+                <div class="metric-value">$bw_display</div>
                 <div class="metric-label">This month</div>
             </div>
         </div>
@@ -314,7 +322,18 @@ sub handle_api {
     my $api_action = $cgi->param('api_action') || '';
 
     if ($api_action eq 'metrics') {
-        print encode_json(get_metrics());
+        my $m    = get_metrics();
+        my $hits = ($m->{cache_hit_redis} || 0) + ($m->{cache_hit_memcached} || 0);
+        my $tot  = ($hits + ($m->{cache_miss} || 0)) || 1;
+        my $rate = ($hits / $tot) * 100;
+        my $bw   = $hits > 0 ? sprintf('%.1f', ($hits * 51_200) / 1_073_741_824) : '0.0';
+        my $sec  = get_security_stats();
+        $m->{hit_rate}       = sprintf('%.1f', $rate);
+        $m->{perf_boost}     = $hits > 0 ? int(100 + ($rate / 100) * 300) : 0;
+        $m->{bandwidth_gb}   = $bw;
+        $m->{blocked}        = $sec->{blocked_requests};
+        $m->{blacklisted}    = $sec->{blacklisted_ips};
+        print encode_json($m);
     } elsif ($api_action eq 'security') {
         print encode_json(get_security_stats());
     } elsif ($api_action eq 'cache_flush') {

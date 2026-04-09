@@ -66,13 +66,45 @@ function updateMetrics(data) {
                          (data.cache_miss || 0);
     const cacheHits = (data.cache_hit_redis || 0) + (data.cache_hit_memcached || 0);
 
-    // Update cache hit rate card
-    if (totalRequests > 0) {
-        const hitRate = ((cacheHits / totalRequests) * 100).toFixed(1);
-        const rateEl = document.querySelector('.cache-icon')?.closest('.metric-card')?.querySelector('.metric-value');
-        if (rateEl) rateEl.textContent = hitRate + '%';
-        const labelEl = document.querySelector('.cache-icon')?.closest('.metric-card')?.querySelector('.metric-label');
-        if (labelEl) labelEl.textContent = cacheHits.toLocaleString() + ' of ' + totalRequests.toLocaleString() + ' requests';
+    // Cache hit rate card
+    {
+        const hitRate = totalRequests > 0 ? ((cacheHits / totalRequests) * 100).toFixed(1) : '0.0';
+        const card = document.querySelector('.cache-icon')?.closest('.metric-card');
+        if (card) {
+            const v = card.querySelector('.metric-value');
+            const l = card.querySelector('.metric-label');
+            if (v) v.textContent = hitRate + '%';
+            if (l) l.textContent = cacheHits.toLocaleString() + ' of ' + totalRequests.toLocaleString() + ' requests';
+        }
+    }
+
+    // Performance boost card (server-computed)
+    if (data.perf_boost !== undefined) {
+        const card = document.querySelector('.perf-icon')?.closest('.metric-card');
+        if (card) {
+            const v = card.querySelector('.metric-value');
+            if (v) v.textContent = data.perf_boost > 0 ? data.perf_boost + '%' : 'Warming up';
+        }
+    }
+
+    // Bandwidth saved card (server-computed in GB)
+    if (data.bandwidth_gb !== undefined) {
+        const card = document.querySelector('.bandwidth-icon')?.closest('.metric-card');
+        if (card) {
+            const v = card.querySelector('.metric-value');
+            if (v) v.textContent = parseFloat(data.bandwidth_gb) > 0 ? data.bandwidth_gb + ' GB' : 'Warming up';
+        }
+    }
+
+    // Security card
+    if (data.blocked !== undefined) {
+        const card = document.querySelector('.security-icon')?.closest('.metric-card');
+        if (card) {
+            const v = card.querySelector('.metric-value');
+            const l = card.querySelector('.metric-label');
+            if (v) v.textContent = (data.blocked || 0).toLocaleString();
+            if (l) l.textContent = (data.blacklisted || 0).toLocaleString() + ' IPs blacklisted';
+        }
     }
 }
 

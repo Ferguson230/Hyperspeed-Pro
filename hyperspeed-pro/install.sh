@@ -158,11 +158,24 @@ elif [[ "$PKG_MANAGER" == "dnf" ]]; then
     done
 
     # Install PHP Redis extension for whichever EasyApache PHP version is active
-    # ea-php##-php-redis must NOT conflict with cPanel since they are EA packages
-    echo "Attempting EA PHP Redis/Memcached extension install..." >> "$INSTALL_LOG"
-    for phpver in ea-php83 ea-php82 ea-php81; do
-        dnf install -y "${phpver}-php-redis" "${phpver}-php-memcached" >> "$INSTALL_LOG" 2>&1 || true
+    # Detect installed EA PHP versions dynamically so we never miss new versions.
+    echo "Detecting installed EA PHP versions..." >> "$INSTALL_LOG"
+    INSTALLED_PHP_VERS=$(rpm -qa --qf '%{NAME}\n' 2>/dev/null | grep -E '^ea-php[0-9]+$' | sed 's/ea-php//' | sort -rV | tr '\n' ' ')
+    # Fall back if no EA PHP detected yet (very early install)
+    [ -z "$INSTALLED_PHP_VERS" ] && INSTALLED_PHP_VERS="83 82 81"
+    echo "EA PHP versions found: $INSTALLED_PHP_VERS" >> "$INSTALL_LOG"
+    for phpver in $INSTALLED_PHP_VERS; do
+        echo "Installing ea-php${phpver}-php-redis and ea-php${phpver}-php-memcached..." >> "$INSTALL_LOG"
+        dnf install -y "ea-php${phpver}-php-redis" "ea-php${phpver}-php-memcached" >> "$INSTALL_LOG" 2>&1 || \
+            echo "Note: ea-php${phpver} extensions not available in repo (version may be EOL)" >> "$INSTALL_LOG"
     done
+
+    # Monthly cron: auto-install extensions for future EA PHP versions added by admins
+    cat > /etc/cron.d/hyperspeed-php-ext << 'CRON'
+# HyperSpeed Pro: monthly auto-install of PHP extensions for new EA PHP versions
+0 3 1 * * root rpm -qa --qf '%{NAME}\n' 2>/dev/null | grep -E '^ea-php[0-9]+$' | sed 's/ea-php//' | sort -u | while read v; do dnf install -q -y "ea-php${v}-php-redis" "ea-php${v}-php-memcached" 2>/dev/null || true; done
+CRON
+    chmod 644 /etc/cron.d/hyperspeed-php-ext
 fi
 
 echo -e "${GREEN}✓ Dependencies installed${NC}"
