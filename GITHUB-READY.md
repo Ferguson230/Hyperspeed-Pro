@@ -421,7 +421,7 @@ git push origin v1.0.0
 ### 4. Test Installation from GitHub (7 minutes)
 ```bash
 # On a test server
-curl -sSL https://raw.githubusercontent.com/YOUR-ORG/hyperspeed-pro/main/quick-install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main/quick-install.sh | sudo bash
 ```
 
 ### 5. Promote (Ongoing)
