@@ -247,17 +247,33 @@ EOF
 cat > /usr/local/cpanel/scripts/hyperspeed-sync << 'EOFSCRIPT'
 #!/bin/bash
 # Sync cPanel user settings with WHM master settings
-# Use cPanel's managed PHP if available, fall back to system PHP
+# Prefer a PHP binary that actually has the Redis extension loaded.
 PHP_BIN=""
-for p in /usr/local/cpanel/3rdparty/bin/php /opt/cpanel/ea-php*/root/usr/bin/php /usr/bin/php; do
-    if [ -x "$p" ]; then
+FALLBACK_PHP=""
+for p in /opt/cpanel/ea-php*/root/usr/bin/php /usr/bin/php /usr/local/cpanel/3rdparty/bin/php; do
+    [ -x "$p" ] || continue
+
+    if [ -z "$FALLBACK_PHP" ]; then
+        FALLBACK_PHP="$p"
+    fi
+
+    if "$p" -r 'exit(class_exists("Redis") ? 0 : 1);' >/dev/null 2>&1; then
         PHP_BIN="$p"
         break
     fi
 done
 
 if [ -z "$PHP_BIN" ]; then
+    PHP_BIN="$FALLBACK_PHP"
+fi
+
+if [ -z "$PHP_BIN" ]; then
     echo "No PHP binary found" >> /var/log/hyperspeed_pro/sync.log
+    exit 1
+fi
+
+if ! "$PHP_BIN" -r 'exit(class_exists("Redis") ? 0 : 1);' >/dev/null 2>&1; then
+    echo "No PHP binary with Redis extension found; sync worker cannot start cleanly" >> /var/log/hyperspeed_pro/sync.log
     exit 1
 fi
 
