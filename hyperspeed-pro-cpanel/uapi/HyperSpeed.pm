@@ -43,9 +43,8 @@ sub _init_redis {
 
     eval {
         $redis = Redis->new(
-            server    => '127.0.0.1:6379',
-            reconnect => 5,
-            every     => 500,
+            server      => '127.0.0.1:6379',
+            cnx_timeout => 2,    # fail fast -- don't block LiveAPI handshake
         );
     };
 
@@ -238,29 +237,21 @@ sub flush_cache {
 
     my $flushed = 0;
     for my $d (@domains_to_flush) {
-        # Use SCAN instead of KEYS to avoid blocking Redis
-        my $cursor = 0;
-        do {
-            my ($next_cursor, $keys) = eval { $r->scan($cursor, MATCH => "domain:$d:*", COUNT => 100) };
-            last if $@;
-            $cursor = $next_cursor;
-            for my $key (@{ $keys // [] }) {
-                eval { $r->del($key) };
-                $flushed++;
+        # Use SCAN (non-blocking) instead of KEYS.
+        # Redis::scan returns a flat list: ($next_cursor, @keys) -- NOT an arrayref.
+        for my $pattern ("domain:$d:*", "page:*${d}*") {
+            my $cursor = 0;
+            while (1) {
+                my ($next_cursor, @keys) = eval { $r->scan($cursor, 'MATCH', $pattern, 'COUNT', 100) };
+                last if $@;                    # Redis error -- give up this pattern
+                $cursor = $next_cursor // 0;
+                for my $key (@keys) {
+                    eval { $r->del($key) };
+                    $flushed++;
+                }
+                last if $cursor == 0;          # SCAN complete
             }
-        } while ($cursor != 0);
-
-        # Also clear page cache keys for this domain
-        $cursor = 0;
-        do {
-            my ($next_cursor, $keys) = eval { $r->scan($cursor, MATCH => "page:*${d}*", COUNT => 100) };
-            last if $@;
-            $cursor = $next_cursor;
-            for my $key (@{ $keys // [] }) {
-                eval { $r->del($key) };
-                $flushed++;
-            }
-        } while ($cursor != 0);
+        }
     }
 
     $logger->info("User $user flushed $flushed cache entries (domain=" . ($domain || 'all') . ")");
