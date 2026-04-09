@@ -13,7 +13,7 @@ curl -sSL https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main/quic
 **Or download and inspect first (recommended):**
 
 ```bash
-wget https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main/quick-install.sh
+wget -O quick-install.sh https://raw.githubusercontent.com/Ferguson230/Hyperspeed-Pro/main/quick-install.sh
 chmod +x quick-install.sh
 sudo ./quick-install.sh
 ```
